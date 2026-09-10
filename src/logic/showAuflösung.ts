@@ -10,6 +10,7 @@ import type {
   Genre,
   Techniker,
   TechnikerRolle,
+  Venue,
   Verleiher,
 } from '@/types'
 
@@ -17,6 +18,18 @@ const GUT_SCHWELLE = 80
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
+}
+
+function formatDelta(delta: number): string {
+  return `${delta >= 0 ? '+' : ''}${delta}`
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency: 'EUR',
+    maximumFractionDigits: 0,
+  }).format(value)
 }
 
 /** Liefert die für ein Genre benötigten Rollen samt Anforderung. */
@@ -168,5 +181,73 @@ export function berechneAuflösung(
     gesamtpunktzahl: Math.round(gesamt),
     kategorie,
     begründung,
+  }
+}
+
+export interface AuswirkungenErgebnis {
+  venue: Venue
+  techniker: Techniker[]
+  verleiher: Verleiher[]
+  auswirkungen: string[]
+}
+
+/** Wendet die Auswirkungen einer Show-Auflösung auf Venue/Techniker/Verleiher an. */
+export function berechneAuswirkungen(
+  anfrage: Anfrage,
+  ergebnis: AuflösungsErgebnis,
+  venue: Venue,
+  techniker: Techniker[],
+  verleiher: Verleiher[]
+): AuswirkungenErgebnis {
+  const auswirkungen: string[] = []
+
+  const reputationDelta =
+    ergebnis.kategorie === 'gut' ? 5 : ergebnis.kategorie === 'mittel' ? 1 : -5
+  const neueReputation = clamp(venue.reputation + reputationDelta, 0, 100)
+  auswirkungen.push(`Reputation ${formatDelta(reputationDelta)}`)
+
+  const verleihFirma = anfrage.gewählterVerleiher
+    ? (verleiher.find((v) => v.name === anfrage.gewählterVerleiher) ?? null)
+    : null
+
+  let budgetDelta = anfrage.gage
+  auswirkungen.push(`Budget +${formatCurrency(anfrage.gage)} (Gage)`)
+  if (verleihFirma) {
+    budgetDelta -= verleihFirma.verleihkostenPauschale
+    auswirkungen.push(
+      `Budget -${formatCurrency(verleihFirma.verleihkostenPauschale)} (Verleih ${verleihFirma.name})`
+    )
+  }
+  const neuesBudget = venue.budget + budgetDelta
+
+  const erfahrungDelta =
+    ergebnis.kategorie === 'gut' ? 8 : ergebnis.kategorie === 'mittel' ? 4 : 2
+  const eingesetzteNamen = new Set(
+    Object.values(anfrage.zugewieseneTechniker).filter((n): n is string => !!n)
+  )
+  const neueTechniker = techniker.map((t) => {
+    if (!eingesetzteNamen.has(t.name)) return t
+    const neu = clamp(t.erfahrung + erfahrungDelta, 0, 100)
+    auswirkungen.push(`${t.name}: Erfahrung +${erfahrungDelta}`)
+    return { ...t, erfahrung: neu }
+  })
+
+  let neueVerleiher = verleiher
+  if (verleihFirma) {
+    const beziehungDelta =
+      ergebnis.verleiherScore >= 80 ? 5 : ergebnis.verleiherScore >= 50 ? 0 : -8
+    neueVerleiher = verleiher.map((v) => {
+      if (v.name !== verleihFirma.name) return v
+      const neu = clamp(v.beziehung + beziehungDelta, 0, 100)
+      return { ...v, beziehung: neu }
+    })
+    auswirkungen.push(`${verleihFirma.name}: Beziehung ${formatDelta(beziehungDelta)}`)
+  }
+
+  return {
+    venue: { ...venue, reputation: neueReputation, budget: neuesBudget },
+    techniker: neueTechniker,
+    verleiher: neueVerleiher,
+    auswirkungen,
   }
 }

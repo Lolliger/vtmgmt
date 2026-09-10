@@ -1,6 +1,10 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react'
 import { anfragen, techniker, venue, verleiher } from '@/data/dummyData'
-import { berechneAuflösung, type AuflösungsErgebnis } from '@/logic/showAuflösung'
+import {
+  berechneAuflösung,
+  berechneAuswirkungen,
+  type AuflösungsErgebnis,
+} from '@/logic/showAuflösung'
 import type { Anfrage, Techniker, TechnikerRolle, Venue, Verleiher } from '@/types'
 
 export type View = 'dashboard' | 'staffing' | 'auflösung'
@@ -96,17 +100,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!show) return state
 
       const ergebnis = berechneAuflösung(show, state.techniker, state.verleiher)
-      // TODO (Schritt 4): Auswirkungen auf Venue/Techniker/Verleiher noch anwenden.
+      const {
+        venue: neuesVenue,
+        techniker: neueTechniker,
+        verleiher: neueVerleiher,
+        auswirkungen,
+      } = berechneAuswirkungen(show, ergebnis, state.venue, state.techniker, state.verleiher)
 
       return {
         ...state,
+        venue: neuesVenue,
+        techniker: neueTechniker,
+        verleiher: neueVerleiher,
         shows: updateShow(state.shows, action.act, (s) => ({
           ...s,
           status: 'aufgelöst',
           ergebnis: ergebnis.kategorie,
         })),
         view: 'auflösung',
-        letzteAuflösung: { ergebnis, auswirkungen: [] },
+        letzteAuflösung: { ergebnis, auswirkungen },
       }
     }
 
