@@ -1,0 +1,1015 @@
+{
+  "version": "1.0",
+  "skills": {
+    "skill-developer": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "description": "Meta-skill for creating and managing Claude Code skills",
+      "promptTriggers": {
+        "keywords": [
+          "skill system",
+          "create skill",
+          "add skill",
+          "skill triggers",
+          "skill rules",
+          "hook system",
+          "skill development",
+          "skill-rules.json"
+        ],
+        "intentPatterns": [
+          "(how do|how does|explain).*?skill",
+          "(create|add|modify|build).*?skill",
+          "skill.*?(work|trigger|activate|system)"
+        ]
+      }
+    },
+    "express": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "express",
+          "express.js",
+          "express.Router",
+          "express.json",
+          "express.urlencoded",
+          "express.static",
+          "app.get",
+          "app.post",
+          "app.put",
+          "app.delete",
+          "app.patch",
+          "app.use",
+          "app.listen",
+          "app.route",
+          "express middleware",
+          "req.body",
+          "req.params",
+          "req.query",
+          "req.headers",
+          "res.json",
+          "res.send",
+          "res.status",
+          "res.redirect",
+          "router.route",
+          "next()"
+        ],
+        "intentPatterns": [
+          "create.*express.*route",
+          "add.*express.*middleware",
+          "setup.*express.*server",
+          "configure.*express.*app",
+          "create.*express.*router",
+          "handle.*express.*request",
+          "create.*rest.*api.*express",
+          "express.*error.*handling",
+          "add.*express.*endpoint"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/routes/**/*.ts",
+          "**/routes/**/*.js",
+          "**/controllers/**/*.ts",
+          "**/controllers/**/*.js",
+          "**/middleware/**/*.ts",
+          "**/middleware/**/*.js",
+          "**/app.ts",
+          "**/app.js",
+          "**/server.ts",
+          "**/server.js"
+        ],
+        "contentPatterns": [
+          "import.*express",
+          "require.*express",
+          "from 'express'",
+          "Router\\(\\)",
+          "app\\.(get|post|put|delete|patch|use|listen)",
+          "express\\.json\\(\\)",
+          "express\\.Router\\(\\)"
+        ]
+      }
+    },
+    "mui": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "mui",
+          "material-ui",
+          "material ui",
+          "@mui/material",
+          "@mui/icons-material",
+          "@mui/system",
+          "sx prop",
+          "mui theme",
+          "ThemeProvider",
+          "createTheme",
+          "useTheme",
+          "styled",
+          "Box",
+          "Typography",
+          "Button",
+          "TextField",
+          "Card",
+          "Dialog",
+          "Drawer",
+          "AppBar",
+          "Grid",
+          "Stack",
+          "Paper",
+          "Container",
+          "IconButton",
+          "Chip",
+          "Avatar",
+          "Alert",
+          "Snackbar",
+          "Menu",
+          "MenuItem",
+          "Select",
+          "Checkbox",
+          "Radio",
+          "Switch",
+          "Tabs",
+          "Autocomplete"
+        ],
+        "intentPatterns": [
+          "style.*with.*mui",
+          "use.*mui.*component",
+          "create.*mui.*theme",
+          "customize.*mui",
+          "add.*material.*ui.*component",
+          "implement.*mui.*dialog",
+          "create.*mui.*form",
+          "setup.*mui.*theme",
+          "use.*mui.*icon",
+          "add.*mui.*(button|card|dialog|form|menu)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/*.styles.ts",
+          "**/*.styles.tsx",
+          "**/components/**/*.tsx",
+          "**/components/**/*.ts",
+          "**/theme.ts",
+          "**/theme.tsx",
+          "**/theme/**/*.ts"
+        ],
+        "contentPatterns": [
+          "import.*@mui/material",
+          "import.*@mui/icons-material",
+          "import.*@mui/system",
+          "from '@mui/material'",
+          "sx=\\{",
+          "<Box",
+          "<Typography",
+          "createTheme\\(",
+          "ThemeProvider",
+          "useTheme\\(\\)",
+          "styled\\("
+        ]
+      }
+    },
+    "nextjs": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "next.js",
+          "nextjs",
+          "app router",
+          "app directory",
+          "server component",
+          "client component",
+          "server action",
+          "generateMetadata",
+          "generateStaticParams",
+          "next/navigation",
+          "next/link",
+          "use client"
+        ],
+        "intentPatterns": [
+          "create.*(page|route|layout|component)",
+          "add.*(page|route|layout|component)",
+          "build.*component",
+          "make.*component",
+          "add.*route.*handler",
+          "create.*api.*route",
+          "add.*server.*action",
+          "create.*server.*component",
+          "create.*client.*component",
+          "add.*metadata",
+          "create.*loading.*state",
+          "add.*error.*boundary",
+          "implement.*dynamic.*route"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/app/**/*.tsx",
+          "**/app/**/*.ts",
+          "**/components/**/*.tsx",
+          "**/next.config.js",
+          "**/next.config.mjs"
+        ]
+      }
+    },
+    "nodejs": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "node.js",
+          "nodejs",
+          "process.env",
+          "process.argv",
+          "process.cwd",
+          "require(",
+          "module.exports",
+          "__dirname",
+          "__filename",
+          "fs.readFile",
+          "fs.writeFile",
+          "fs.promises",
+          "path.join",
+          "path.resolve",
+          "http.createServer",
+          "https.createServer",
+          "EventEmitter",
+          "Buffer",
+          "stream.Readable",
+          "stream.Writable",
+          "child_process",
+          "os.platform",
+          "crypto.createHash",
+          "util.promisify"
+        ],
+        "intentPatterns": [
+          "create.*node.*server",
+          "read.*file.*node",
+          "write.*file.*node",
+          "use.*node.*fs",
+          "create.*node.*stream",
+          "spawn.*child.*process",
+          "use.*buffer",
+          "create.*http.*server",
+          "use.*path.*module",
+          "handle.*process.*events",
+          "use.*node.*(fs|path|http|crypto|stream)"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/services/**/*.ts",
+          "**/services/**/*.js",
+          "**/utils/**/*.ts",
+          "**/utils/**/*.js",
+          "**/lib/**/*.ts",
+          "**/lib/**/*.js",
+          "**/scripts/**/*.js",
+          "**/scripts/**/*.ts"
+        ],
+        "contentPatterns": [
+          "import.*fs.*from 'fs'",
+          "import.*path.*from 'path'",
+          "import.*http.*from 'http'",
+          "require\\('fs'\\)",
+          "require\\('path'\\)",
+          "require\\('http'\\)",
+          "process\\.env",
+          "__dirname",
+          "__filename",
+          "Buffer\\.",
+          "createServer\\(",
+          "EventEmitter"
+        ]
+      }
+    },
+    "prisma": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "prisma",
+          "prisma client",
+          "prisma schema",
+          "prisma migrate",
+          "prisma studio",
+          "@prisma/client",
+          "PrismaClient",
+          "prisma.create",
+          "prisma.findMany",
+          "prisma.findUnique",
+          "prisma.update",
+          "prisma.delete",
+          "prisma.upsert",
+          "prisma.$transaction",
+          "@id",
+          "@default",
+          "@unique",
+          "@relation",
+          "@map",
+          "schema.prisma",
+          "generator client",
+          "datasource db",
+          "findFirst",
+          "findUnique",
+          "findMany",
+          "include",
+          "select",
+          "where",
+          "orderBy"
+        ],
+        "intentPatterns": [
+          "create.*prisma.*model",
+          "add.*prisma.*schema",
+          "create.*prisma.*migration",
+          "update.*prisma.*schema",
+          "query.*with.*prisma",
+          "setup.*prisma.*client",
+          "define.*prisma.*relation",
+          "add.*prisma.*field",
+          "prisma.*transaction",
+          "prisma.*(findMany|findUnique|create|update|delete)",
+          "create.*database.*model.*prisma"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/prisma/schema.prisma",
+          "**/prisma/**/*.prisma",
+          "**/repositories/**/*.ts",
+          "**/repositories/**/*.js",
+          "**/db/**/*.ts",
+          "**/db/**/*.js",
+          "**/prisma/**/*.ts"
+        ],
+        "contentPatterns": [
+          "import.*@prisma/client",
+          "from '@prisma/client'",
+          "new PrismaClient\\(\\)",
+          "prisma\\.(create|findMany|findUnique|findFirst|update|delete|upsert)",
+          "prisma\\.\\$transaction",
+          "model\\s+\\w+\\s*\\{",
+          "generator client",
+          "datasource db",
+          "@id",
+          "@relation"
+        ]
+      }
+    },
+    "react": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "react",
+          "useState",
+          "useEffect",
+          "useCallback",
+          "useMemo",
+          "useRef",
+          "useContext",
+          "useReducer",
+          "useTransition",
+          "useDeferredValue",
+          "useId",
+          "useSyncExternalStore",
+          "useImperativeHandle",
+          "useLayoutEffect",
+          "React.lazy",
+          "React.memo",
+          "React.forwardRef",
+          "React.createContext",
+          "createContext",
+          "forwardRef",
+          "Suspense",
+          "ErrorBoundary",
+          "StrictMode",
+          "startTransition",
+          "flushSync",
+          "createPortal",
+          "cloneElement"
+        ],
+        "intentPatterns": [
+          "use.*react.*hook",
+          "implement.*(useState|useEffect|useCallback|useMemo|useContext|useReducer)",
+          "add.*react.*(lazy|suspense|memo)",
+          "create.*react.*context",
+          "optimize.*react.*component",
+          "memoize.*react.*component",
+          "use.*(useTransition|useDeferredValue)",
+          "create.*error.*boundary",
+          "implement.*react.*(forwardRef|memo)",
+          "add.*react.*portal"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/*.tsx",
+          "**/*.jsx",
+          "**/components/**/*.ts",
+          "**/features/**/*.tsx",
+          "**/hooks/**/*.ts",
+          "**/hooks/**/*.tsx"
+        ],
+        "contentPatterns": [
+          "import.*from ['\"]react['\"]",
+          "import.*React.*from ['\"]react['\"]",
+          "useState\\(",
+          "useEffect\\(",
+          "useCallback\\(",
+          "useMemo\\(",
+          "useContext\\(",
+          "useReducer\\(",
+          "React\\.memo\\(",
+          "React\\.lazy\\(",
+          "forwardRef\\("
+        ]
+      }
+    },
+    "shadcn": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "shadcn",
+          "shadcn/ui",
+          "npx shadcn",
+          "@/components/ui",
+          "table component",
+          "form component",
+          "dialog component",
+          "card component",
+          "button component"
+        ],
+        "intentPatterns": [
+          "create.*(table|form|dialog|card|button)",
+          "add.*(table|form|dialog|card|button).*component",
+          "add.*shadcn.*component",
+          "install.*shadcn.*component",
+          "style.*component.*shadcn",
+          "use.*shadcn"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/components/ui/**",
+          "**/components.json"
+        ]
+      }
+    },
+    "tailwindcss": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "tailwind",
+          "tailwindcss",
+          "utility classes",
+          "@apply",
+          "tailwind.config",
+          "dark mode"
+        ],
+        "intentPatterns": [
+          "style.*with.*tailwind",
+          "add.*tailwind.*classes",
+          "configure.*tailwind",
+          "setup.*tailwind",
+          "customize.*theme",
+          "add.*dark.*mode"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/tailwind.config.js",
+          "**/tailwind.config.ts",
+          "**/globals.css",
+          "**/*.css"
+        ],
+        "contentPatterns": [
+          "className=['\"].*flex",
+          "className=['\"].*grid",
+          "className=['\"].*bg-",
+          "@apply"
+        ]
+      }
+    },
+    "tanstack-query": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "tanstack query",
+          "react query",
+          "@tanstack/react-query",
+          "useQuery",
+          "useMutation",
+          "useSuspenseQuery",
+          "useInfiniteQuery",
+          "useQueries",
+          "useQueryClient",
+          "useIsFetching",
+          "useIsMutating",
+          "useMutationState",
+          "QueryClient",
+          "QueryClientProvider",
+          "queryKey",
+          "queryFn",
+          "mutationFn",
+          "invalidateQueries",
+          "setQueryData",
+          "getQueryData",
+          "removeQueries",
+          "resetQueries",
+          "staleTime",
+          "cacheTime",
+          "refetchInterval",
+          "refetchOnWindowFocus",
+          "refetchOnReconnect",
+          "isLoading",
+          "isError",
+          "isFetching",
+          "isSuccess",
+          "queryCache",
+          "mutationCache"
+        ],
+        "intentPatterns": [
+          "use.*tanstack.*query",
+          "use.*react.*query",
+          "create.*tanstack.*(query|mutation)",
+          "invalidate.*query.*cache",
+          "invalidate.*tanstack.*queries",
+          "prefetch.*query",
+          "setup.*query.*client",
+          "configure.*tanstack.*query",
+          "use.*(useQuery|useMutation|useInfiniteQuery)",
+          "implement.*query.*invalidation",
+          "add.*query.*key",
+          "set.*query.*data"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/api/**/*.ts",
+          "**/api/**/*.tsx",
+          "**/queries/**/*.ts",
+          "**/queries/**/*.tsx",
+          "**/hooks/**/*.ts",
+          "**/hooks/**/*.tsx",
+          "**/mutations/**/*.ts",
+          "**/mutations/**/*.tsx"
+        ],
+        "contentPatterns": [
+          "useQuery\\(",
+          "useMutation\\(",
+          "useSuspenseQuery\\(",
+          "useInfiniteQuery\\(",
+          "useQueryClient\\(",
+          "queryClient\\.",
+          "import.*@tanstack/react-query",
+          "from '@tanstack/react-query'",
+          "QueryClientProvider",
+          "new QueryClient\\(",
+          "invalidateQueries\\(",
+          "setQueryData\\(",
+          "queryKey:",
+          "queryFn:"
+        ]
+      }
+    },
+    "tanstack-router": {
+      "type": "domain",
+      "enforcement": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "tanstack router",
+          "@tanstack/react-router",
+          "createFileRoute",
+          "createRootRoute",
+          "createRoute",
+          "createRouter",
+          "RouterProvider",
+          "useNavigate",
+          "useParams",
+          "useSearch",
+          "useLoaderData",
+          "useRouter",
+          "useMatches",
+          "useMatch",
+          "useLocation",
+          "route loader",
+          "Route.lazy",
+          "beforeLoad",
+          "validateSearch",
+          "Link",
+          "Outlet",
+          "Navigate",
+          "redirect",
+          "notFound"
+        ],
+        "intentPatterns": [
+          "create.*tanstack.*route",
+          "add.*tanstack.*route",
+          "setup.*tanstack.*router",
+          "implement.*file.*based.*routing",
+          "create.*route.*loader",
+          "add.*route.*validation",
+          "use.*tanstack.*navigation",
+          "create.*lazy.*route",
+          "implement.*route.*guard",
+          "add.*search.*params.*validation",
+          "create.*router.*tanstack"
+        ]
+      },
+      "fileTriggers": {
+        "pathPatterns": [
+          "**/routes/**/*.tsx",
+          "**/routes/**/*.ts",
+          "**/routes/**/*.lazy.tsx",
+          "**/routes/**/*.lazy.ts",
+          "**/__root.tsx"
+        ],
+        "contentPatterns": [
+          "createFileRoute\\(",
+          "createRootRoute\\(",
+          "createRoute\\(",
+          "createRouter\\(",
+          "import.*@tanstack/react-router",
+          "from '@tanstack/react-router'",
+          "RouterProvider",
+          "useNavigate\\(\\)",
+          "useParams\\(\\)",
+          "useSearch\\(\\)",
+          "Route\\.lazy"
+        ]
+      }
+    }
+  },
+  "agents": {
+    "auto-error-resolver": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "critical",
+      "promptTriggers": {
+        "keywords": [
+          "build error",
+          "build errors",
+          "compilation error",
+          "compilation errors",
+          "typescript error",
+          "typescript errors",
+          "tsc error",
+          "build fail",
+          "build failed",
+          "build failing",
+          "fix errors",
+          "fix build",
+          "resolve errors",
+          "errors in build"
+        ],
+        "intentPatterns": [
+          "(fix|resolve|solve).*(build|compilation|typescript|tsc).*(error|errors|issue)",
+          "(build|compilation).*(fail|failed|failing|broken)",
+          "(typescript|tsc).*(error|errors|issue).*( in | with )",
+          "\\d+.*(error|errors).*(found|detected|in)",
+          "(clean|fix).*(build|compilation)"
+        ]
+      },
+      "errorTriggers": {
+        "enabled": true,
+        "patterns": [
+          "TS\\d{4}:",
+          "error TS\\d{4}:",
+          "Type error:",
+          "build failed",
+          "Compilation failed"
+        ],
+        "description": "Automatically suggest when TypeScript or build errors are detected"
+      }
+    },
+    "code-architecture-reviewer": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "review code",
+          "review my code",
+          "finished implementing",
+          "completed",
+          "done with",
+          "check my code",
+          "code review",
+          "review this",
+          "review the",
+          "added a new",
+          "created a new",
+          "implemented a new",
+          "finished the",
+          "completed the"
+        ],
+        "intentPatterns": [
+          "(review|check).*(code|implementation)",
+          "(finished|completed|done).*(implementing|building|creating|adding)",
+          "(finished|completed|done).*(component|feature|endpoint|service|function)",
+          "(added|created|implemented).*(new).*(component|endpoint|service|feature)",
+          "i('ve| have).*(finished|completed|added|created|implemented)",
+          "(refactored|updated).*(to use|with)"
+        ]
+      },
+      "postToolUseTriggers": {
+        "enabled": true,
+        "tools": [
+          "Edit",
+          "Write",
+          "MultiEdit"
+        ],
+        "minEdits": 3,
+        "withinMinutes": 10,
+        "description": "Suggest code review after significant editing session"
+      }
+    },
+    "code-refactor-master": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "reorganize",
+          "cleanup",
+          "clean up",
+          "is a mess",
+          "messy",
+          "break down",
+          "extract",
+          "split up",
+          "too large",
+          "too big",
+          "unmaintainable",
+          "hard to maintain",
+          "loading patterns",
+          "loading returns",
+          "file structure",
+          "move files",
+          "relocate"
+        ],
+        "intentPatterns": [
+          "(reorganize|cleanup|clean up).*(folder|directory|structure|components)",
+          "(folder|directory|component).*(is a mess|messy)",
+          "(break down|split|extract).*(large|big).*(component|file)",
+          "(file|component).*(too large|too big|over \\d+ lines)",
+          "(fix|replace).*(loading|early return).*(pattern|indicator)",
+          "(move|relocate).*(files|components)"
+        ]
+      }
+    },
+    "documentation-architect": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "document",
+          "documentation",
+          "create docs",
+          "write docs",
+          "readme",
+          "api docs",
+          "api documentation",
+          "data flow",
+          "architecture diagram",
+          "developer guide",
+          "document this",
+          "document the",
+          "needs documentation",
+          "needs docs",
+          "update docs",
+          "update documentation"
+        ],
+        "intentPatterns": [
+          "(create|write|update|enhance).*(documentation|docs|readme)",
+          "(document|explain).*(this|the).*(feature|system|api|flow)",
+          "(need|needs).*(documentation|docs)",
+          "(api|endpoint|feature).*(needs|requires).*(documentation|docs)",
+          "(data flow|architecture).*(diagram|documentation)"
+        ]
+      }
+    },
+    "plan-reviewer": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "review plan",
+          "review my plan",
+          "review this plan",
+          "check plan",
+          "check my plan",
+          "before implementation",
+          "before implementing",
+          "before i start",
+          "before proceeding",
+          "plan to",
+          "strategy for",
+          "approach for",
+          "migration plan",
+          "integration plan"
+        ],
+        "intentPatterns": [
+          "(review|check|validate).*(plan|strategy|approach)",
+          "(before).*(implementation|implementing|proceeding|starting)",
+          "here('s| is).*(plan|strategy|approach)",
+          "(migration|integration|refactoring).*(plan|strategy)",
+          "(want|need).*(to make sure|ensure|verify)",
+          "(haven't|might have).*(missed|overlooked)"
+        ]
+      }
+    },
+    "principal-engineer": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "high",
+      "description": "Apply rigorous first-principles engineering analysis to any technical task",
+      "promptTriggers": {
+        "keywords": [
+          "implement",
+          "build",
+          "create",
+          "write",
+          "develop",
+          "add feature",
+          "new feature",
+          "debug",
+          "fix",
+          "solve",
+          "troubleshoot",
+          "broken",
+          "not working",
+          "issue",
+          "problem",
+          "bug",
+          "error",
+          "optimize",
+          "improve",
+          "refactor",
+          "enhance",
+          "performance",
+          "slow",
+          "faster",
+          "efficient",
+          "design",
+          "architect",
+          "architecture",
+          "structure",
+          "organize",
+          "plan",
+          "approach",
+          "strategy",
+          "review",
+          "analyze",
+          "evaluate",
+          "check",
+          "assess",
+          "investigate",
+          "best way",
+          "right way",
+          "correct way",
+          "should i",
+          "how do i",
+          "how to",
+          "what's the best",
+          "which approach",
+          "trade-off",
+          "tradeoff",
+          "pros and cons",
+          "alternative",
+          "better way",
+          "complex",
+          "complicated",
+          "messy",
+          "clean up",
+          "simplify",
+          "scale",
+          "scalability",
+          "production",
+          "edge case",
+          "corner case"
+        ],
+        "intentPatterns": [
+          "(how|what).*(best|right|correct|proper).*(way|approach|method)",
+          "(should i|can i|would you).*(use|implement|build|create)",
+          "(implement|build|create|write|add).*(feature|function|component|service|api)",
+          "(debug|fix|solve|troubleshoot).*(bug|error|issue|problem)",
+          "(optimize|improve|make.*faster|speed up|enhance)",
+          "(refactor|restructure|reorganize|clean up)",
+          "(design|architect|plan).*(system|architecture|approach|solution)",
+          "(review|analyze|evaluate|assess).*(code|implementation|approach|design)",
+          "(performance|slow|bottleneck|inefficient)",
+          "(trade.*off|tradeoff|alternative|option|choice)",
+          "(complex|complicated|messy|hard to understand)",
+          "(scale|scalability|production|real world)",
+          "(is this|does this).*(right|correct|good|best)",
+          "what.*think.*(about|of)",
+          "(help|assist).*(with|me).*(implement|build|design|fix|optimize)"
+        ]
+      },
+      "contextTriggers": {
+        "fileTypes": [
+          ".ts",
+          ".tsx",
+          ".js",
+          ".jsx",
+          ".py",
+          ".go",
+          ".rs",
+          ".java",
+          ".c",
+          ".cpp",
+          ".h",
+          ".hpp"
+        ],
+        "description": "Activate for any serious engineering work in code files"
+      }
+    },
+    "refactor-planner": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "high",
+      "promptTriggers": {
+        "keywords": [
+          "refactor",
+          "restructure",
+          "reorganize",
+          "improve code",
+          "modernize",
+          "code structure",
+          "better organization",
+          "technical debt",
+          "code smell",
+          "design patterns",
+          "getting large",
+          "getting complex",
+          "legacy code",
+          "messy code"
+        ],
+        "intentPatterns": [
+          "(refactor|restructure|reorganize).*(code|component|service|module)",
+          "improve.*(organization|structure|architecture)",
+          "(need|want).*(better|cleaner).*(organization|structure)",
+          "(code|component|file).*(is|getting).*(large|complex|messy)",
+          "(modernize|update).*(legacy|old).*(code|patterns)",
+          "(consolidate|deduplicate).*(code|logic|patterns)"
+        ]
+      }
+    },
+    "web-research-specialist": {
+      "type": "workflow",
+      "activation": "suggest",
+      "priority": "medium",
+      "promptTriggers": {
+        "keywords": [
+          "research",
+          "find solution",
+          "search for",
+          "look up",
+          "debug",
+          "debugging",
+          "error",
+          "getting error",
+          "how do others",
+          "how to",
+          "best practices",
+          "pros and cons",
+          "compare",
+          "comparison",
+          "stack overflow",
+          "github issues",
+          "similar issues"
+        ],
+        "intentPatterns": [
+          "(research|find|search|look up).*(solution|information|approach)",
+          "(how|what).*(others|developers).*(implement|approach|handle)",
+          "(debug|fix|solve).*(error|issue|problem)",
+          "(getting|encountering|having).*(error|issue|problem)",
+          "(compare|comparison).*(different|various).*(solutions|approaches|libraries)",
+          "(pros and cons|advantages).*(of)",
+          "(best practice|recommended way).*(to|for)"
+        ]
+      }
+    }
+  }
+}
