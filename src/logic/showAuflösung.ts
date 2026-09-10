@@ -1,5 +1,23 @@
-import { GENRE_ANFORDERUNGEN, type RollenAnforderung } from '@/data/genreAnforderungen'
-import type { EquipmentKategorie, Genre, TechnikerRolle } from '@/types'
+import {
+  GENRE_ANFORDERUNGEN,
+  erfülltMindeststufe,
+  type RollenAnforderung,
+} from '@/data/genreAnforderungen'
+import type {
+  Anfrage,
+  EquipmentKategorie,
+  Ergebnis,
+  Genre,
+  Techniker,
+  TechnikerRolle,
+  Verleiher,
+} from '@/types'
+
+const GUT_SCHWELLE = 80
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
 
 /** Liefert die für ein Genre benötigten Rollen samt Anforderung. */
 export function benötigteRollen(
@@ -45,4 +63,110 @@ export function hatEquipmentLücke(
   return benötigteRollen(genre).some(
     ([rolle]) => ermittleEquipmentLücke(rolle, genre, equipmentBestand) !== null
   )
+}
+
+export interface AuflösungsErgebnis {
+  staffingScore: number
+  verleiherScore: number
+  zufallsfaktor: number
+  gesamtpunktzahl: number
+  kategorie: Ergebnis
+  begründung: string
+}
+
+function ermittleBegründung(params: {
+  staffingScore: number
+  verleiherScore: number
+  zufallsfaktor: number
+  schwächsteRolle: TechnikerRolle | null
+  verleiherName: string | null
+}): string {
+  const { staffingScore, verleiherScore, zufallsfaktor, schwächsteRolle, verleiherName } =
+    params
+
+  const staffingIstSchwach = staffingScore < GUT_SCHWELLE
+  const verleiherIstSchwach = verleiherScore < GUT_SCHWELLE
+
+  if (staffingIstSchwach && (staffingScore <= verleiherScore || !verleiherIstSchwach)) {
+    return schwächsteRolle
+      ? `Techniker ${schwächsteRolle} war für diese Show-Größe zu unerfahren.`
+      : 'Das Team war für diese Show-Größe zu unerfahren.'
+  }
+
+  if (verleiherIstSchwach) {
+    return verleiherName
+      ? `Verleiher ${verleiherName} hat nicht zuverlässig geliefert.`
+      : 'Ein Verleihpartner hat nicht zuverlässig geliefert.'
+  }
+
+  if (zufallsfaktor <= -5) {
+    return 'Trotz guter Vorbereitung lief am Showtag etwas schief.'
+  }
+
+  return 'Show lief rund, Team hat sauber gearbeitet.'
+}
+
+/** Berechnet die Show-Auflösung anhand der gewichteten Punktesumme. */
+export function berechneAuflösung(
+  anfrage: Anfrage,
+  techniker: Techniker[],
+  verleiher: Verleiher[]
+): AuflösungsErgebnis {
+  const rollenEintraege = benötigteRollen(anfrage.genre)
+
+  let summe = 0
+  let schwächsteRolle: TechnikerRolle | null = null
+  let schwächsterWert = Infinity
+
+  for (const [rolle, anforderung] of rollenEintraege) {
+    const zugewiesenerName = anfrage.zugewieseneTechniker[rolle]
+    let punkte: number
+    if (!zugewiesenerName) {
+      punkte = 0
+    } else {
+      const person = techniker.find((t) => t.name === zugewiesenerName)
+      punkte =
+        person && erfülltMindeststufe(person.stufe, anforderung.minStufe) ? 100 : 50
+    }
+    summe += punkte
+    if (punkte < schwächsterWert) {
+      schwächsterWert = punkte
+      schwächsteRolle = rolle
+    }
+  }
+
+  const staffingScore = rollenEintraege.length > 0 ? summe / rollenEintraege.length : 100
+
+  let verleiherScore = 100
+  let verleiherName: string | null = null
+  if (anfrage.gewählterVerleiher) {
+    const firma = verleiher.find((v) => v.name === anfrage.gewählterVerleiher)
+    if (firma) {
+      verleiherScore = firma.zuverlässigkeit
+      verleiherName = firma.name
+    }
+  }
+
+  const zufallsfaktor = Math.round(Math.random() * 20 - 10)
+
+  const gesamt = clamp(staffingScore * 0.6 + verleiherScore * 0.4 + zufallsfaktor, 0, 100)
+
+  const kategorie: Ergebnis = gesamt >= 80 ? 'gut' : gesamt >= 50 ? 'mittel' : 'problematisch'
+
+  const begründung = ermittleBegründung({
+    staffingScore,
+    verleiherScore,
+    zufallsfaktor,
+    schwächsteRolle,
+    verleiherName,
+  })
+
+  return {
+    staffingScore: Math.round(staffingScore),
+    verleiherScore: Math.round(verleiherScore),
+    zufallsfaktor,
+    gesamtpunktzahl: Math.round(gesamt),
+    kategorie,
+    begründung,
+  }
 }

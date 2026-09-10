@@ -1,18 +1,12 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react'
 import { anfragen, techniker, venue, verleiher } from '@/data/dummyData'
-import type { Anfrage, Ergebnis, Techniker, TechnikerRolle, Venue, Verleiher } from '@/types'
+import { berechneAuflösung, type AuflösungsErgebnis } from '@/logic/showAuflösung'
+import type { Anfrage, Techniker, TechnikerRolle, Venue, Verleiher } from '@/types'
 
 export type View = 'dashboard' | 'staffing' | 'auflösung'
 
 export interface AuflösungsAnzeige {
-  ergebnis: {
-    staffingScore: number
-    verleiherScore: number
-    zufallsfaktor: number
-    gesamtpunktzahl: number
-    kategorie: Ergebnis
-    begründung: string
-  }
+  ergebnis: AuflösungsErgebnis
   auswirkungen: string[]
 }
 
@@ -101,28 +95,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const show = state.shows.find((s) => s.act === action.act)
       if (!show) return state
 
-      // TODO (Schritt 3): echte Berechnung über logic/showAuflösung.ts statt Platzhalter.
-      const platzhalterErgebnis: AuflösungsAnzeige = {
-        ergebnis: {
-          staffingScore: 0,
-          verleiherScore: 0,
-          zufallsfaktor: 0,
-          gesamtpunktzahl: 0,
-          kategorie: 'mittel',
-          begründung: 'Auflösung wird berechnet (folgt in Schritt 3).',
-        },
-        auswirkungen: [],
-      }
+      const ergebnis = berechneAuflösung(show, state.techniker, state.verleiher)
+      // TODO (Schritt 4): Auswirkungen auf Venue/Techniker/Verleiher noch anwenden.
 
       return {
         ...state,
         shows: updateShow(state.shows, action.act, (s) => ({
           ...s,
           status: 'aufgelöst',
-          ergebnis: platzhalterErgebnis.ergebnis.kategorie,
+          ergebnis: ergebnis.kategorie,
         })),
         view: 'auflösung',
-        letzteAuflösung: platzhalterErgebnis,
+        letzteAuflösung: { ergebnis, auswirkungen: [] },
       }
     }
 
