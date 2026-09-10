@@ -28,7 +28,7 @@ const preisniveauLabel: Record<Preisniveau, string> = {
 }
 
 export function Dashboard() {
-  const { venue, techniker, verleiher, shows, annehmen, ablehnen } = useGame()
+  const { venue, techniker, verleiher, shows, annehmen, ablehnen, openStaffing } = useGame()
 
   const offeneAnfragen = shows.filter((s) => s.status === 'offen')
   const anstehendeShows = shows.filter((s) => s.status === 'angenommen')
@@ -65,9 +65,11 @@ export function Dashboard() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {anstehendeShows.map((show) => (
-              <div
+              <button
                 key={show.act}
-                className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                type="button"
+                onClick={() => openStaffing(show.act)}
+                className="flex flex-col gap-2 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium">{show.act}</p>
@@ -78,7 +80,8 @@ export function Dashboard() {
                   {show.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete Besucher ·{' '}
                   {budgetFormatter.format(show.gage)} Gage
                 </p>
-              </div>
+                <p className="text-sm text-primary underline-offset-4">Staffing öffnen →</p>
+              </button>
             ))}
           </CardContent>
         </Card>
