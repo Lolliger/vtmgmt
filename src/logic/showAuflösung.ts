@@ -5,6 +5,7 @@ import {
 } from '@/data/genreAnforderungen'
 import type {
   Anfrage,
+  EquipmentItem,
   EquipmentKategorie,
   Ergebnis,
   Genre,
@@ -66,7 +67,7 @@ export interface EquipmentBedarfEintrag {
  */
 export function ermittleAlleEquipmentBedarfe(
   genre: Genre,
-  equipmentBestand: Record<EquipmentKategorie, number>
+  equipmentBestand: EquipmentItem[]
 ): EquipmentBedarfEintrag[] {
   const bedarfProKategorie = new Map<EquipmentKategorie, number>()
 
@@ -82,7 +83,7 @@ export function ermittleAlleEquipmentBedarfe(
   }
 
   return Array.from(bedarfProKategorie.entries()).map(([kategorie, bedarf]) => {
-    const bestand = equipmentBestand[kategorie]
+    const bestand = equipmentBestand.filter((e) => e.kategorie === kategorie).length
     return {
       kategorie,
       bedarf,

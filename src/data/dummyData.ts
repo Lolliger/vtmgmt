@@ -1,11 +1,138 @@
-import type { Anfrage, Techniker, Venue, Verleiher } from '@/types'
+import type {
+  Anfrage,
+  Bewerbung,
+  EquipmentAntrag,
+  EquipmentItem,
+  EquipmentKategorie,
+  Kuendigungsantrag,
+  Techniker,
+  Venue,
+  Verleiher,
+} from '@/types'
+
+/**
+ * Baut die einzelnen Equipment-Items einer Kategorie aus parallelen Namens-
+ * und Zustands-Listen. Zustände sind feste Werte (kein Math.random()), damit
+ * Dummy-Daten deterministisch bleiben.
+ */
+function baueEquipmentItems(
+  kategorie: EquipmentKategorie,
+  namen: string[],
+  zustände: number[]
+): EquipmentItem[] {
+  return namen.map((name, i) => ({
+    id: `${kategorie.toLowerCase()}-${i + 1}`,
+    kategorie,
+    name,
+    zustand: zustände[i],
+  }))
+}
+
+export const equipmentBestand: EquipmentItem[] = [
+  ...baueEquipmentItems(
+    'PA',
+    [
+      'PA-Stack Links',
+      'PA-Stack Rechts',
+      'Subwoofer 1',
+      'Subwoofer 2',
+      'Subwoofer 3',
+      'Subwoofer 4',
+    ],
+    [92, 90, 78, 78, 65, 60]
+  ),
+  ...baueEquipmentItems(
+    'Licht',
+    ['Moving Head 1', 'Moving Head 2', 'Moving Head 3', 'PAR-Scheinwerfer 1', 'PAR-Scheinwerfer 2'],
+    [85, 82, 70, 95, 88]
+  ),
+  ...baueEquipmentItems('Rigging', ['Traverse 1', 'Traverse 2', 'Traverse 3'], [90, 75, 68]),
+  ...baueEquipmentItems(
+    'IEM',
+    [
+      'IEM-Set 1',
+      'IEM-Set 2',
+      'IEM-Set 3',
+      'IEM-Set 4',
+      'IEM-Set 5',
+      'IEM-Set 6',
+      'IEM-Set 7',
+      'IEM-Set 8',
+    ],
+    [88, 88, 80, 80, 72, 72, 60, 55]
+  ),
+  ...baueEquipmentItems(
+    'Signal',
+    ['Stagebox', 'Mischpult-Patch', 'Multicore 1', 'Multicore 2', 'Multicore 3', 'Multicore 4'],
+    [95, 90, 80, 80, 70, 62]
+  ),
+]
 
 export const venue: Venue = {
   name: 'Halle 9',
   budget: 48200,
   reputation: 62,
-  equipmentBestand: { PA: 6, Licht: 5, Rigging: 3, IEM: 8, Signal: 6 },
+  equipmentBestand,
 }
+
+export const equipmentAntraege: EquipmentAntrag[] = [
+  {
+    id: 'antrag-1',
+    kategorie: 'PA',
+    anzahl: 2,
+    anschaffungskosten: 3200,
+    beschreibung: '2 zusätzliche PA-Subwoofer für größere Shows',
+  },
+  {
+    id: 'antrag-2',
+    kategorie: 'Rigging',
+    anzahl: 1,
+    anschaffungskosten: 900,
+    beschreibung: '1 Ersatz-Rigging-Traverse',
+  },
+  {
+    id: 'antrag-3',
+    kategorie: 'IEM',
+    anzahl: 3,
+    anschaffungskosten: 1500,
+    beschreibung: '3 neue IEM-Sets (aktuelle sind veraltet)',
+  },
+]
+
+export const bewerbungen: Bewerbung[] = [
+  {
+    id: 'bewerbung-1',
+    name: 'Anna Schuster',
+    rolle: 'FOH',
+    stufe: 'Trainee',
+    erfahrung: 5,
+    gehaltsforderung: 400,
+  },
+  {
+    id: 'bewerbung-2',
+    name: 'Paul Krüger',
+    rolle: 'Licht',
+    stufe: 'Techniker',
+    erfahrung: 30,
+    gehaltsforderung: 650,
+  },
+  {
+    id: 'bewerbung-3',
+    name: 'Lea Winter',
+    rolle: 'Monitor',
+    stufe: 'Senior',
+    erfahrung: 55,
+    gehaltsforderung: 950,
+  },
+]
+
+export const kuendigungsantraege: Kuendigungsantrag[] = [
+  {
+    id: 'kuendigung-1',
+    technikerName: 'Tom Adler',
+    grund: 'Unzufrieden mit dem Gehalt',
+  },
+]
 
 export const techniker: Techniker[] = [
   {

@@ -1,5 +1,13 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react'
-import { anfragen, techniker, venue, verleiher } from '@/data/dummyData'
+import {
+  anfragen,
+  bewerbungen,
+  equipmentAntraege,
+  kuendigungsantraege,
+  techniker,
+  venue,
+  verleiher,
+} from '@/data/dummyData'
 import {
   ermittleEreignisFürPhase,
   type Ereignis,
@@ -14,7 +22,11 @@ import {
 } from '@/logic/showAuflösung'
 import type {
   Anfrage,
+  Bewerbung,
+  EquipmentAntrag,
+  EquipmentItem,
   EquipmentKategorie,
+  Kuendigungsantrag,
   Techniker,
   TechnikerRolle,
   Venue,
@@ -56,6 +68,21 @@ function formatDelta(delta: number): string {
   return `${delta >= 0 ? '+' : ''}${delta}`
 }
 
+/** Uhrzeit-Grenze 19:30 Uhr, als Minuten seit Mitternacht - siehe Aufbau-Malus. */
+const AUFBAU_MALUS_GRENZE_MINUTE = 19 * 60 + 30
+const AUFBAU_MALUS_SCORE_DELTA = -15
+
+/** Maximale Anzahl an Einträgen im Ablauf-Verlauf (siehe AblaufStatus.verlauf). */
+const VERLAUF_MAX_EINTRÄGE = 6
+
+/**
+ * Fügt einen neuen Verlaufs-Eintrag vorne an (neueste zuerst) und kappt auf
+ * VERLAUF_MAX_EINTRÄGE - ältere Einträge fallen dabei automatisch raus.
+ */
+function fügeVerlaufEintragHinzu(verlauf: string[], eintrag: string): string[] {
+  return [eintrag, ...verlauf].slice(0, VERLAUF_MAX_EINTRÄGE)
+}
+
 /** Ein während des Ablaufs gesammeltes Ereignis samt Effekt, bis zur finalen Auflösung. */
 export interface GesammeltesEreignis {
   effekt: EreignisEffekt
@@ -91,6 +118,10 @@ export interface AblaufStatus {
   gesammelteEreignisse: GesammeltesEreignis[]
   /** Phase, zu der ein aktuell aktives Reaktions-Ereignis (aktivesEreignis) gehört. */
   aktuellePhaseFürEreignis: EreignisPhase | null
+  /** Chronologischer Verlauf kurzer Status-Meldungen, neueste zuerst, max. VERLAUF_MAX_EINTRÄGE. */
+  verlauf: string[]
+  /** true, sobald EINE der beiden Mini-Entscheidungen (Briefing/Pause) genutzt wurde - nur einmal pro Ablauf möglich. */
+  miniEntscheidungGenutzt: boolean
 }
 
 export interface AuflösungsAnzeige {
@@ -117,10 +148,12 @@ export interface TagesUhr {
   pausiertSeit: number | null
   /** Date.now() ms, bis wann der Blackout dauert. null = kein Blackout aktiv. */
   blackoutBis: number | null
+  /** Zeitraffer-Faktor - 1 = normal, 2 = doppelte Geschwindigkeit. Default 1. */
+  tempo: 1 | 2
 }
 
 function baueNeueTagesUhr(): TagesUhr {
-  return { tag: 1, tagStartZeitpunkt: Date.now(), pausiertSeit: null, blackoutBis: null }
+  return { tag: 1, tagStartZeitpunkt: Date.now(), pausiertSeit: null, blackoutBis: null, tempo: 1 }
 }
 
 /**
@@ -128,12 +161,14 @@ function baueNeueTagesUhr(): TagesUhr {
  * Ist die Uhr pausiert (pausiertSeit !== null), wird der eingefrorene Zeitpunkt
  * statt Date.now() verwendet - die Minute bleibt dann konstant, bis die Pause
  * aufgelöst wird (siehe SOUNDCHECK_BESTÄTIGEN/EREIGNIS_REAGIEREN/SOUNDCHECK_ABBRECHEN).
+ * tempo (1x/2x) beschleunigt den Fortschritt zusätzlich - siehe TEMPO_SETZEN für den
+ * nahtlosen Übergang zwischen den Tempo-Stufen ohne Zeitsprung.
  * Einzige Stelle im Code, die Echtzeit in Spielzeit umrechnet.
  */
 export function ermittleAktuelleMinute(tagesUhr: TagesUhr): number {
   const referenzZeitpunkt = tagesUhr.pausiertSeit ?? Date.now()
   const vergangeneSekunden = (referenzZeitpunkt - tagesUhr.tagStartZeitpunkt) / 1000
-  return TAGESBEGINN_MINUTE + vergangeneSekunden / SEKUNDEN_PRO_SPIELMINUTE
+  return TAGESBEGINN_MINUTE + (vergangeneSekunden / SEKUNDEN_PRO_SPIELMINUTE) * tagesUhr.tempo
 }
 
 /**
@@ -187,6 +222,12 @@ export interface GameState {
   ablaufStatus: AblaufStatus | null
   /** Die EINE Zeitquelle des Spiels - wird persistiert. */
   tagesUhr: TagesUhr
+  /** Offene Anträge auf zusätzliches Equipment - vom Spieler zu bewilligen/abzulehnen. */
+  equipmentAntraege: EquipmentAntrag[]
+  /** Offene Bewerbungen neuer Techniker-Kandidaten - vom Spieler anzunehmen/abzulehnen. */
+  bewerbungen: Bewerbung[]
+  /** Offene Kündigungsanträge bestehender Techniker - vom Spieler zu akzeptieren/abzulehnen. */
+  kuendigungsantraege: Kuendigungsantrag[]
 }
 
 type GameAction =
@@ -217,6 +258,15 @@ type GameAction =
   | { type: 'SOUNDCHECK_ABBRECHEN' }
   | { type: 'EREIGNIS_REAGIEREN'; reaktion: 'A' | 'B' }
   | { type: 'TICK' }
+  | { type: 'TEMPO_SETZEN'; tempo: 1 | 2 }
+  | { type: 'MINI_ENTSCHEIDUNG_BRIEFING' }
+  | { type: 'MINI_ENTSCHEIDUNG_PAUSE' }
+  | { type: 'EQUIPMENT_ANTRAG_BEWILLIGEN'; id: string }
+  | { type: 'EQUIPMENT_ANTRAG_ABLEHNEN'; id: string }
+  | { type: 'BEWERBUNG_ANNEHMEN'; id: string }
+  | { type: 'BEWERBUNG_ABLEHNEN'; id: string }
+  | { type: 'KUENDIGUNG_AKZEPTIEREN'; id: string }
+  | { type: 'KUENDIGUNG_ABLEHNEN'; id: string }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -236,6 +286,9 @@ interface GespeicherterSpielstand {
   zwangsentlassungAusstehend: boolean
   tagesUhr: TagesUhr
   schemaVersion: number
+  equipmentAntraege: EquipmentAntrag[]
+  bewerbungen: Bewerbung[]
+  kuendigungsantraege: Kuendigungsantrag[]
 }
 
 function istGültigeTagesUhr(value: unknown): value is TagesUhr {
@@ -256,15 +309,19 @@ function istGültigeTagesUhr(value: unknown): value is TagesUhr {
  * kann diese nach dem Laden nicht fortgesetzt werden, da ablaufStatus nicht
  * persistiert wird - die Zeit wird stattdessen einfach fortgesetzt, statt für
  * immer eingefroren zu bleiben.
+ * tempo fehlt bei Spielständen aus der Zeit vor dem Zeitraffer - kein
+ * Schema-Bruch, einfach mit Default 1 auffüllen.
  */
 function normalisiereGeladeneTagesUhr(tagesUhr: TagesUhr): TagesUhr {
+  const tempo: 1 | 2 = tagesUhr.tempo === 2 ? 2 : 1
   if (tagesUhr.pausiertSeit === null || tagesUhr.pausiertSeit === undefined) {
-    return { ...tagesUhr, pausiertSeit: null }
+    return { ...tagesUhr, pausiertSeit: null, tempo }
   }
   return {
     ...tagesUhr,
     tagStartZeitpunkt: tagesUhr.tagStartZeitpunkt + (Date.now() - tagesUhr.pausiertSeit),
     pausiertSeit: null,
+    tempo,
   }
 }
 
@@ -296,6 +353,9 @@ export function baueNeuenSpielstand(): GameState {
     aktivesEreignis: null,
     ablaufStatus: null,
     tagesUhr: baueNeueTagesUhr(),
+    equipmentAntraege,
+    bewerbungen,
+    kuendigungsantraege,
   }
 }
 
@@ -386,6 +446,12 @@ export function ladeGespeichertenSpielstand(): GameState | null {
       tagesUhr: istGültigeTagesUhr(geparst.tagesUhr)
         ? normalisiereGeladeneTagesUhr(geparst.tagesUhr)
         : baueNeueTagesUhr(),
+      // Fehlen bei älteren Spielständen ohne diese Listen - mit leerem Array auffüllen.
+      equipmentAntraege: Array.isArray(geparst.equipmentAntraege) ? geparst.equipmentAntraege : [],
+      bewerbungen: Array.isArray(geparst.bewerbungen) ? geparst.bewerbungen : [],
+      kuendigungsantraege: Array.isArray(geparst.kuendigungsantraege)
+        ? geparst.kuendigungsantraege
+        : [],
     }
   } catch (error) {
     console.warn('Gespeicherter Spielstand konnte nicht geladen werden:', error)
@@ -487,8 +553,23 @@ function führeShowAuflösungDurch(
     }
   }
 
+  // Verlauf-Eintrag für die finale Auflösung - wird direkt danach vom Aufrufer (TICK)
+  // durch ablaufStatus: null ersetzt, hier trotzdem korrekt gesetzt, falls
+  // führeShowAuflösungDurch künftig auch von anderer Stelle ohne sofortiges
+  // Zurücksetzen aufgerufen wird.
+  const ablaufStatus = state.ablaufStatus
+    ? {
+        ...state.ablaufStatus,
+        verlauf: fügeVerlaufEintragHinzu(
+          state.ablaufStatus.verlauf,
+          `Show beendet, Ergebnis: ${ergebnis.kategorie}`
+        ),
+      }
+    : state.ablaufStatus
+
   return {
     ...state,
+    ablaufStatus,
     venue: neuesVenue,
     techniker: neueTechniker,
     verleiher: neueVerleiher,
@@ -619,7 +700,21 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         })),
       }
 
-    case 'ABLAUF_STARTEN':
+    case 'ABLAUF_STARTEN': {
+      // Aufbau-Malus: steht bereits beim Start fest, ob der (feste) Aufbau über
+      // 19:30 Uhr hinausläuft - dann direkt als Ereignis vorbelegen, statt erst
+      // bei der finalen Auflösung zu prüfen.
+      const gesammelteEreignisse: GesammeltesEreignis[] =
+        action.aufbauEndeMinute > AUFBAU_MALUS_GRENZE_MINUTE
+          ? [
+              {
+                effekt: { scoreDelta: AUFBAU_MALUS_SCORE_DELTA },
+                beschreibung: 'Aufbau war nicht rechtzeitig vor 19:30 fertig',
+                phase: 'aufbau',
+              },
+            ]
+          : []
+
       return {
         ...state,
         activeShowAct: action.act,
@@ -638,10 +733,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ereignisZeitpunkte: action.ereignisZeitpunkte,
           ereignisGeprüft: { aufbau: false, show: false, abbau: false },
           soundcheckBestätigt: false,
-          gesammelteEreignisse: [],
+          gesammelteEreignisse,
           aktuellePhaseFürEreignis: null,
+          verlauf: ['Aufbau gestartet'],
+          miniEntscheidungGenutzt: false,
         },
       }
+    }
 
     case 'SOUNDCHECK_BESTÄTIGEN': {
       if (!state.ablaufStatus || state.tagesUhr.pausiertSeit === null) return state
@@ -651,6 +749,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
           ...state.ablaufStatus,
           soundcheckBestätigt: true,
           pausierGrund: null,
+          verlauf: fügeVerlaufEintragHinzu(
+            state.ablaufStatus.verlauf,
+            'Soundcheck bestanden, Show kann beginnen'
+          ),
         },
         tagesUhr: {
           ...state.tagesUhr,
@@ -695,6 +797,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             ...state.ablaufStatus.gesammelteEreignisse,
             { effekt: reaktion.effekt, beschreibung: ereignis.beschreibung, phase },
           ],
+          verlauf: fügeVerlaufEintragHinzu(state.ablaufStatus.verlauf, ereignis.beschreibung),
         },
         tagesUhr: {
           ...state.tagesUhr,
@@ -715,7 +818,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         const neuerTag = tagesUhr.tag + 1
         const neuerState: GameState = {
           ...state,
-          tagesUhr: { tag: neuerTag, tagStartZeitpunkt: Date.now(), pausiertSeit: null, blackoutBis: null },
+          tagesUhr: {
+            tag: neuerTag,
+            tagStartZeitpunkt: Date.now(),
+            pausiertSeit: null,
+            blackoutBis: null,
+            tempo: tagesUhr.tempo,
+          },
         }
         // Automatischer Wochenabschluss: der Übergang VON Tag 7 zu Tag 8 markiert
         // das Ende von Woche 1, usw. - nicht beim allerersten Tag (Spielstart).
@@ -744,7 +853,11 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       if (!ablaufStatus.soundcheckBestätigt && aktuelleMinute >= ablaufStatus.soundcheckMinute) {
         return {
           ...state,
-          ablaufStatus: { ...ablaufStatus, pausierGrund: 'soundcheck' },
+          ablaufStatus: {
+            ...ablaufStatus,
+            pausierGrund: 'soundcheck',
+            verlauf: fügeVerlaufEintragHinzu(ablaufStatus.verlauf, 'Soundcheck erreicht'),
+          },
           tagesUhr: { ...tagesUhr, pausiertSeit: Date.now() },
         }
       }
@@ -801,6 +914,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
                   ...ablaufStatus.gesammelteEreignisse,
                   { effekt: ergebnis.effekt, beschreibung: ergebnis.beschreibung, phase },
                 ],
+                verlauf: fügeVerlaufEintragHinzu(ablaufStatus.verlauf, ergebnis.beschreibung),
               },
             }
           }
@@ -831,6 +945,85 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return state
     }
 
+    case 'TEMPO_SETZEN': {
+      // Nahtloser Übergang: die aktuell angezeigte Minute (mit ALTEM Tempo berechnet)
+      // muss mit dem NEUEN Tempo sofort wieder herauskommen - dafür tagStartZeitpunkt
+      // passend zurückrechnen, statt nur tempo zu setzen (das würde einen Zeitsprung
+      // verursachen).
+      const aktuelleMinuteVorher = ermittleAktuelleMinute(state.tagesUhr)
+      const tagStartZeitpunktNeu =
+        Date.now() -
+        ((aktuelleMinuteVorher - TAGESBEGINN_MINUTE) * 1000 * SEKUNDEN_PRO_SPIELMINUTE) /
+          action.tempo
+
+      return {
+        ...state,
+        tagesUhr: {
+          ...state.tagesUhr,
+          tagStartZeitpunkt: tagStartZeitpunktNeu,
+          tempo: action.tempo,
+        },
+      }
+    }
+
+    case 'MINI_ENTSCHEIDUNG_BRIEFING': {
+      // Defensive: nur sinnvoll während eines laufenden Ablaufs, und nur einmal
+      // pro Ablauf (Briefing ODER Pause, nicht beides).
+      if (!state.ablaufStatus || state.ablaufStatus.miniEntscheidungGenutzt) return state
+
+      const show = state.shows.find((s) => s.act === state.ablaufStatus?.act)
+      if (!show) return state
+
+      const zugewieseneNamen = Object.values(show.zugewieseneTechniker).filter(
+        (n): n is string => !!n
+      )
+
+      return {
+        ...state,
+        techniker: state.techniker.map((t) =>
+          zugewieseneNamen.includes(t.name) ? { ...t, moral: clamp(t.moral + 2, 0, 100) } : t
+        ),
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          miniEntscheidungGenutzt: true,
+          verlauf: fügeVerlaufEintragHinzu(
+            state.ablaufStatus.verlauf,
+            'Team briefen: +2 Moral für das Team'
+          ),
+        },
+      }
+    }
+
+    case 'MINI_ENTSCHEIDUNG_PAUSE': {
+      // Defensive: nur sinnvoll während eines laufenden Ablaufs, nur einmal pro
+      // Ablauf, und nur bei ausreichendem Budget.
+      if (!state.ablaufStatus || state.ablaufStatus.miniEntscheidungGenutzt) return state
+      if (state.venue.budget < 50) return state
+
+      const show = state.shows.find((s) => s.act === state.ablaufStatus?.act)
+      if (!show) return state
+
+      const zugewieseneNamen = Object.values(show.zugewieseneTechniker).filter(
+        (n): n is string => !!n
+      )
+
+      return {
+        ...state,
+        venue: { ...state.venue, budget: state.venue.budget - 50 },
+        techniker: state.techniker.map((t) =>
+          zugewieseneNamen.includes(t.name) ? { ...t, moral: clamp(t.moral + 5, 0, 100) } : t
+        ),
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          miniEntscheidungGenutzt: true,
+          verlauf: fügeVerlaufEintragHinzu(
+            state.ablaufStatus.verlauf,
+            'Pause spendiert (-50€): +5 Moral für das Team'
+          ),
+        },
+      }
+    }
+
     case 'BACK_TO_DASHBOARD':
       return {
         ...state,
@@ -854,6 +1047,81 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
     }
 
+    case 'EQUIPMENT_ANTRAG_BEWILLIGEN': {
+      const antrag = state.equipmentAntraege.find((a) => a.id === action.id)
+      if (!antrag) return state
+
+      const neueItems: EquipmentItem[] = Array.from({ length: antrag.anzahl }, (_, i) => ({
+        id: `${antrag.kategorie.toLowerCase()}-neu-${Date.now()}-${i}`,
+        kategorie: antrag.kategorie,
+        name: `${antrag.kategorie} (neu)`,
+        zustand: 95 + Math.min(5, i),
+      }))
+
+      return {
+        ...state,
+        venue: {
+          ...state.venue,
+          budget: state.venue.budget - antrag.anschaffungskosten,
+          equipmentBestand: [...state.venue.equipmentBestand, ...neueItems],
+        },
+        equipmentAntraege: state.equipmentAntraege.filter((a) => a.id !== action.id),
+      }
+    }
+
+    case 'EQUIPMENT_ANTRAG_ABLEHNEN':
+      return {
+        ...state,
+        equipmentAntraege: state.equipmentAntraege.filter((a) => a.id !== action.id),
+      }
+
+    case 'BEWERBUNG_ANNEHMEN': {
+      const bewerbung = state.bewerbungen.find((b) => b.id === action.id)
+      if (!bewerbung) return state
+
+      const neuerTechniker: Techniker = {
+        name: bewerbung.name,
+        rolle: bewerbung.rolle,
+        stufe: bewerbung.stufe,
+        erfahrung: bewerbung.erfahrung,
+        verfügbar: true,
+        wochenstunden: 40,
+        verplanteStunden: 0,
+        moral: 70,
+        gehalt: bewerbung.gehaltsforderung,
+      }
+
+      return {
+        ...state,
+        techniker: [...state.techniker, neuerTechniker],
+        bewerbungen: state.bewerbungen.filter((b) => b.id !== action.id),
+      }
+    }
+
+    case 'BEWERBUNG_ABLEHNEN':
+      return {
+        ...state,
+        bewerbungen: state.bewerbungen.filter((b) => b.id !== action.id),
+      }
+
+    case 'KUENDIGUNG_AKZEPTIEREN': {
+      const antrag = state.kuendigungsantraege.find((k) => k.id === action.id)
+      if (!antrag) return state
+
+      return {
+        ...state,
+        techniker: state.techniker.filter((t) => t.name !== antrag.technikerName),
+        kuendigungsantraege: state.kuendigungsantraege.filter((k) => k.id !== action.id),
+      }
+    }
+
+    case 'KUENDIGUNG_ABLEHNEN':
+      // Techniker bleibt unverändert - der Spieler hat sich entschieden, ihn zu halten.
+      return {
+        ...state,
+        kuendigungsantraege: state.kuendigungsantraege.filter((k) => k.id !== action.id),
+      }
+
     default:
       return state
   }
@@ -874,9 +1142,21 @@ interface GameContextValue extends GameState {
   soundcheckBestätigen: () => void
   soundcheckAbbrechen: () => void
   ereignisReagieren: (reaktion: 'A' | 'B') => void
+  /** Setzt den Zeitraffer (1x/2x) - nahtlos ohne Zeitsprung, siehe TEMPO_SETZEN. */
+  tempoSetzen: (tempo: 1 | 2) => void
+  /** Mini-Entscheidung während Aufbau/Abbau: +2 Moral fürs Team, ohne Kosten. Nur einmal pro Ablauf nutzbar. */
+  miniEntscheidungBriefing: () => void
+  /** Mini-Entscheidung während Aufbau/Abbau: +5 Moral fürs Team für 50€. Nur einmal pro Ablauf nutzbar. */
+  miniEntscheidungPause: () => void
   backToDashboard: () => void
   entlassen: (name: string) => void
   speichern: () => void
+  equipmentAntragBewilligen: (id: string) => void
+  equipmentAntragAblehnen: (id: string) => void
+  bewerbungAnnehmen: (id: string) => void
+  bewerbungAblehnen: (id: string) => void
+  kuendigungAkzeptieren: (id: string) => void
+  kuendigungAblehnen: (id: string) => void
   activeShow: Anfrage | null
   /** Summe der wöchentlichen Gehälter aller aktuellen Techniker (Abzug beim nächsten automatischen Wochenabschluss). */
   wochenGehaltssumme: number
@@ -942,8 +1222,17 @@ export function GameProvider({
       soundcheckBestätigen: () => dispatch({ type: 'SOUNDCHECK_BESTÄTIGEN' }),
       soundcheckAbbrechen: () => dispatch({ type: 'SOUNDCHECK_ABBRECHEN' }),
       ereignisReagieren: (reaktion) => dispatch({ type: 'EREIGNIS_REAGIEREN', reaktion }),
+      tempoSetzen: (tempo) => dispatch({ type: 'TEMPO_SETZEN', tempo }),
+      miniEntscheidungBriefing: () => dispatch({ type: 'MINI_ENTSCHEIDUNG_BRIEFING' }),
+      miniEntscheidungPause: () => dispatch({ type: 'MINI_ENTSCHEIDUNG_PAUSE' }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
       entlassen: (name) => dispatch({ type: 'ENTLASSEN', name }),
+      equipmentAntragBewilligen: (id) => dispatch({ type: 'EQUIPMENT_ANTRAG_BEWILLIGEN', id }),
+      equipmentAntragAblehnen: (id) => dispatch({ type: 'EQUIPMENT_ANTRAG_ABLEHNEN', id }),
+      bewerbungAnnehmen: (id) => dispatch({ type: 'BEWERBUNG_ANNEHMEN', id }),
+      bewerbungAblehnen: (id) => dispatch({ type: 'BEWERBUNG_ABLEHNEN', id }),
+      kuendigungAkzeptieren: (id) => dispatch({ type: 'KUENDIGUNG_AKZEPTIEREN', id }),
+      kuendigungAblehnen: (id) => dispatch({ type: 'KUENDIGUNG_ABLEHNEN', id }),
       speichern: () => {
         try {
           const spielstand: GespeicherterSpielstand = {
@@ -955,6 +1244,9 @@ export function GameProvider({
             zwangsentlassungAusstehend: state.zwangsentlassungAusstehend,
             tagesUhr: state.tagesUhr,
             schemaVersion: SPIELSTAND_SCHEMA_VERSION,
+            equipmentAntraege: state.equipmentAntraege,
+            bewerbungen: state.bewerbungen,
+            kuendigungsantraege: state.kuendigungsantraege,
           }
           localStorage.setItem(SPIELSTAND_KEY, JSON.stringify(spielstand))
         } catch (error) {

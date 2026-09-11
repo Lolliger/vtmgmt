@@ -11,6 +11,8 @@ import {
 } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { budgetFormatter, dateFormatter } from '@/lib/format'
+import { ermittlePhase, PHASE_LABEL } from '@/lib/ablaufAnzeige'
+import { useAktuelleMinute } from '@/hooks/useAktuelleMinute'
 import type { Schwierigkeit } from '@/data/genreAnforderungen'
 import {
   benötigteRollen,
@@ -43,7 +45,9 @@ export function StaffingScreen() {
     toggleÜberstunden,
     resolveShow,
     backToDashboard,
+    ablaufStatus,
   } = useGame()
+  const aktuelleMinute = useAktuelleMinute()
 
   if (!activeShow) {
     return (
@@ -67,6 +71,21 @@ export function StaffingScreen() {
     .every((eintrag) => !!activeShow.gewählteVerleiherProKategorie[eintrag.kategorie])
   const kannDurchführen = alleRollenBesetzt && alleLückenGedeckt
 
+  const ablaufLäuftBereits = ablaufStatus?.act === activeShow.act
+  const laufendePhase = ablaufLäuftBereits ? ermittlePhase(ablaufStatus, aktuelleMinute) : null
+
+  const activeShowAct = activeShow.act
+
+  function handleDurchführen() {
+    if (ablaufLäuftBereits) {
+      const bestätigt = window.confirm(
+        'Der laufende Ablauf wird komplett neu gestartet. Fortfahren?'
+      )
+      if (!bestätigt) return
+    }
+    resolveShow(activeShowAct)
+  }
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <Button variant="ghost" size="sm" onClick={backToDashboard} className="w-fit">
@@ -83,8 +102,16 @@ export function StaffingScreen() {
             {budgetFormatter.format(activeShow.gage)} Gage
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Badge variant="outline">{activeShow.genre}</Badge>
+        <CardContent className="flex flex-col gap-2">
+          <Badge variant="outline" className="w-fit">
+            {activeShow.genre}
+          </Badge>
+          {ablaufLäuftBereits && (
+            <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+              Diese Show läuft bereits (Phase: {laufendePhase ? PHASE_LABEL[laufendePhase] : '–'})
+              – Änderungen hier gelten erst nach einem Neustart.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -279,7 +306,7 @@ export function StaffingScreen() {
       )}
 
       <div className="flex justify-end">
-        <Button disabled={!kannDurchführen} onClick={() => resolveShow(activeShow.act)}>
+        <Button disabled={!kannDurchführen} onClick={handleDurchführen}>
           Show durchführen
         </Button>
       </div>

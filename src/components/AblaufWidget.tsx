@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { useAktuelleMinute } from '@/hooks/useAktuelleMinute'
 import { BesucherSzene, TransportSzene } from '@/components/AblaufSzenen'
 import { ermittleFlavorText, ermittlePhase, PHASE_LABEL, phasenFortschritt } from '@/lib/ablaufAnzeige'
@@ -22,7 +23,7 @@ const PHASE_BALKEN_FARBE: Record<'aufbau' | 'wartezeit' | 'show' | 'abbau', stri
  * staffen kann.
  */
 export function AblaufWidget() {
-  const { ablaufStatus, shows } = useGame()
+  const { ablaufStatus, shows, venue, miniEntscheidungBriefing, miniEntscheidungPause } = useGame()
   const aktuelleMinute = useAktuelleMinute()
 
   if (!ablaufStatus) return null
@@ -61,6 +62,41 @@ export function AblaufWidget() {
           <BesucherSzene erwarteteBesucherzahl={show.erwarteteBesucherzahl} compact />
         )}
         {phase === 'abbau' && <TransportSzene richtung="zurück" compact />}
+
+        {ablaufStatus.verlauf.length > 0 && (
+          <ul className="flex max-h-24 flex-col gap-0.5 overflow-y-auto border-t border-border pt-2">
+            {ablaufStatus.verlauf.map((eintrag, index) => (
+              <li
+                key={`${index}-${eintrag}`}
+                className="text-[10px] leading-tight text-muted-foreground"
+              >
+                {eintrag}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!ablaufStatus.miniEntscheidungGenutzt && (
+          <div className="flex gap-2 border-t border-border pt-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 flex-1 px-2 text-[11px]"
+              onClick={() => miniEntscheidungBriefing()}
+            >
+              Team briefen
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 flex-1 px-2 text-[11px]"
+              disabled={venue.budget < 50}
+              onClick={() => miniEntscheidungPause()}
+            >
+              Pause (-50€)
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

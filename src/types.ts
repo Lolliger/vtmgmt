@@ -1,10 +1,18 @@
 export type EquipmentKategorie = 'PA' | 'Licht' | 'Rigging' | 'IEM' | 'Signal'
 
+export interface EquipmentItem {
+  id: string
+  kategorie: EquipmentKategorie
+  name: string
+  /** Zustand/Abnutzung, Skala 0-100. */
+  zustand: number
+}
+
 export interface Venue {
   name: string
   budget: number
   reputation: number
-  equipmentBestand: Record<EquipmentKategorie, number>
+  equipmentBestand: EquipmentItem[]
 }
 
 export type TechnikerRolle = 'FOH' | 'Monitor' | 'Licht' | 'Rigging'
@@ -30,6 +38,15 @@ export interface Techniker {
   moral: number
   /** Wöchentliches Gehalt in Euro, abhängig von Stufe. */
   gehalt: number
+}
+
+/** Antrag auf Anschaffung von zusätzlichem Equipment - vom Spieler zu bewilligen/abzulehnen. */
+export interface EquipmentAntrag {
+  id: string
+  kategorie: EquipmentKategorie
+  anzahl: number
+  anschaffungskosten: number
+  beschreibung: string
 }
 
 export type Preisniveau = 'günstig' | 'mittel' | 'premium'
@@ -60,4 +77,21 @@ export interface Anfrage {
   ergebnis: Ergebnis | null
   /** Hält fest, für welche zugewiesene Rolle der Techniker in Überstunden arbeitet. */
   überstundenProRolle: Partial<Record<TechnikerRolle, boolean>>
+}
+
+/** Bewerbung eines potenziellen neuen Technikers - vom Spieler anzunehmen/abzulehnen. */
+export interface Bewerbung {
+  id: string
+  name: string
+  rolle: TechnikerRolle
+  stufe: TechnikerStufe
+  erfahrung: number
+  gehaltsforderung: number
+}
+
+/** Kündigungsantrag eines bestehenden Technikers - vom Spieler zu akzeptieren/abzulehnen. */
+export interface Kuendigungsantrag {
+  id: string
+  technikerName: string
+  grund: string
 }
