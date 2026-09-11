@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { UhrAnzeige } from '@/components/UhrAnzeige'
+import { AblaufScreen } from '@/components/screens/AblaufScreen'
 import { AuflösungScreen } from '@/components/screens/AuflösungScreen'
 import { Dashboard } from '@/components/screens/Dashboard'
 import { EreignisScreen } from '@/components/screens/EreignisScreen'
@@ -14,12 +16,28 @@ import {
 } from '@/state/GameContext'
 
 function Screens() {
-  const { view } = useGame()
+  const { view, tickAblauf } = useGame()
+
+  // tickAblauf ändert seine Referenz bei jedem State-Update (kommt aus einem
+  // useMemo mit Dep [state]) - per Ref immer aktuell halten, damit das
+  // Interval unten wirklich nur einmalig aufgesetzt wird und trotzdem nie
+  // eine veraltete Closure aufruft.
+  const tickAblaufRef = useRef(tickAblauf)
+  tickAblaufRef.current = tickAblauf
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      tickAblaufRef.current()
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="min-h-svh bg-muted/30 px-4 py-8 sm:px-8">
+      <UhrAnzeige />
       {view === 'dashboard' && <Dashboard />}
       {view === 'staffing' && <StaffingScreen />}
+      {view === 'ablauf' && <AblaufScreen />}
       {view === 'auflösung' && <AuflösungScreen />}
       {view === 'ereignis' && <EreignisScreen />}
     </div>

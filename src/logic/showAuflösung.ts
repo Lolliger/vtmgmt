@@ -41,6 +41,15 @@ export function geschätzteShowStunden(anfrage: Anfrage): number {
   return 9 + Math.ceil(Math.max(0, anfrage.erwarteteBesucherzahl - 500) / 500)
 }
 
+/**
+ * Teilt die Gesamtdauer einer Show (siehe geschätzteShowStunden) in ihre drei
+ * Phasen auf. Die Summe der drei Werte entspricht immer geschätzteShowStunden(anfrage).
+ */
+export function phasenStunden(anfrage: Anfrage): { aufbau: number; show: number; abbau: number } {
+  const zusatz = Math.ceil(Math.max(0, anfrage.erwarteteBesucherzahl - 500) / 500)
+  return { aufbau: 4 + zusatz, show: 3, abbau: 2 }
+}
+
 /** Liefert die für ein Genre benötigten Rollen samt Anforderung. */
 export function benötigteRollen(
   genre: Genre
@@ -150,13 +159,26 @@ function ermittleBegründung(params: {
   return 'Show lief rund, Team hat sauber gearbeitet.'
 }
 
-/** Berechnet die Show-Auflösung anhand der gewichteten Punktesumme. */
-export function berechneAuflösung(
+interface KernScores {
+  staffingScore: number
+  equipmentScore: number
+  schwächsteRolle: TechnikerRolle | null
+  schwächsteEquipmentKategorie: EquipmentKategorie | null
+  schwächsterVerleiherName: string | null
+}
+
+/**
+ * Berechnet staffingScore und equipmentScore (unrundet) sowie die jeweils
+ * schwächsten Glieder. Gemeinsame Basis für berechneAuflösung() (dort +
+ * Zufallsfaktor/Gesamtpunktzahl) und vorschauScores() (reine Vorschau ohne
+ * Zufallsfaktor, z.B. für die Soundcheck-Karte).
+ */
+function berechneKernScores(
   anfrage: Anfrage,
   techniker: Techniker[],
   verleiher: Verleiher[],
   venue: Venue
-): AuflösungsErgebnis {
+): KernScores {
   const rollenEintraege = benötigteRollen(anfrage.genre)
 
   let summe = 0
@@ -228,6 +250,47 @@ export function berechneAuflösung(
   }
 
   const equipmentScore = gewichtSumme > 0 ? gewichteteSumme / gewichtSumme : 100
+
+  return {
+    staffingScore,
+    equipmentScore,
+    schwächsteRolle,
+    schwächsteEquipmentKategorie,
+    schwächsterVerleiherName,
+  }
+}
+
+/**
+ * Liefert staffingScore/equipmentScore OHNE Zufallsfaktor - für Vorschauzwecke
+ * (z.B. die Soundcheck-Karte vor der eigentlichen Auflösung).
+ */
+export function vorschauScores(
+  anfrage: Anfrage,
+  techniker: Techniker[],
+  verleiher: Verleiher[],
+  venue: Venue
+): { staffingScore: number; equipmentScore: number } {
+  const { staffingScore, equipmentScore } = berechneKernScores(anfrage, techniker, verleiher, venue)
+  return {
+    staffingScore: Math.round(staffingScore),
+    equipmentScore: Math.round(equipmentScore),
+  }
+}
+
+/** Berechnet die Show-Auflösung anhand der gewichteten Punktesumme. */
+export function berechneAuflösung(
+  anfrage: Anfrage,
+  techniker: Techniker[],
+  verleiher: Verleiher[],
+  venue: Venue
+): AuflösungsErgebnis {
+  const {
+    staffingScore,
+    equipmentScore,
+    schwächsteRolle,
+    schwächsteEquipmentKategorie,
+    schwächsterVerleiherName,
+  } = berechneKernScores(anfrage, techniker, verleiher, venue)
 
   const zufallsfaktor = Math.round(Math.random() * 30 - 15)
 

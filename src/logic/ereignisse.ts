@@ -14,8 +14,11 @@ export interface EreignisReaktion {
   effekt: EreignisEffekt
 }
 
+export type EreignisPhase = 'aufbau' | 'show' | 'abbau'
+
 export interface Ereignis {
   id: string
+  phase: EreignisPhase
   beschreibung: string
   reaktionA: EreignisReaktion
   reaktionB: EreignisReaktion
@@ -62,6 +65,7 @@ function prüfeVerleiherLieferverzögerung(
     chance,
     ereignis: {
       id: 'verleiher-lieferverzögerung',
+      phase: 'aufbau',
       beschreibung: `Verleiher ${firma.name} meldet eine Lieferverzögerung beim ${kategorie}-Equipment.`,
       reaktionA: {
         label: 'Express-Lieferung buchen (+300€)',
@@ -95,6 +99,7 @@ function prüfeTechnikerKrank(
     chance,
     ereignis: {
       id: 'techniker-krank',
+      phase: 'aufbau',
       beschreibung: `${name} meldet sich krank.`,
       reaktionA: {
         label: 'Ersatz kurzfristig buchen (+200€)',
@@ -116,6 +121,7 @@ function prüfeRiderÄnderung(anfrage: Anfrage): { ereignis: Ereignis; chance: n
     chance,
     ereignis: {
       id: 'rider-änderung',
+      phase: 'aufbau',
       beschreibung: `${anfrage.act} bringt kurzfristig eine Rider-Änderung mit zusätzlichen Anforderungen.`,
       reaktionA: {
         label: 'Zusatzwunsch erfüllen (+200€)',
@@ -145,6 +151,7 @@ function prüfeEigenbestandDefekt(
     chance,
     ereignis: {
       id: 'eigenbestand-defekt',
+      phase: 'aufbau',
       beschreibung: `Defekt am hauseigenen ${eintrag.kategorie}-Equipment.`,
       reaktionA: {
         label: 'Sofort-Reparatur (150€)',
@@ -176,6 +183,7 @@ function prüfeUnerfahrenesErsatzpersonal(
     chance,
     ereignis: {
       id: 'unerfahrenes-ersatzpersonal',
+      phase: 'aufbau',
       beschreibung: `${firma.name} schickt kurzfristig unerfahrenes Ersatzpersonal für das ${kategorie}-Equipment.`,
       reaktionA: {
         label: 'Nachbessern lassen (100€)',
@@ -195,6 +203,7 @@ function prüfeTerminverschiebung(anfrage: Anfrage): { ereignis: Ereignis; chanc
     chance: 5,
     ereignis: {
       id: 'terminverschiebung',
+      phase: 'aufbau',
       beschreibung: `${anfrage.act} bittet kurzfristig um eine Terminverschiebung.`,
       reaktionA: {
         label: 'Flexibel bleiben, Team umdisponieren',
@@ -237,72 +246,272 @@ function prüfePublikumsandrang(
   }
 }
 
+// 9. Parkplatzproblem beim Aufbau
+function prüfeParkplatzproblem(): { ereignis: Ereignis; chance: number } {
+  return {
+    chance: 10,
+    ereignis: {
+      id: 'parkplatzproblem',
+      phase: 'aufbau',
+      beschreibung: 'Der Lieferwagen des Verleihers findet keinen Parkplatz - der Aufbau verzögert sich.',
+      reaktionA: {
+        label: 'Zusätzliche Arbeitskraft engagieren (+100€)',
+        effekt: { budgetDelta: -100 },
+      },
+      reaktionB: {
+        label: 'Selbst mit anpacken',
+        effekt: { moralDeltaZufälligerTechniker: -5 },
+      },
+    },
+  }
+}
+
+// 10. Technischer Ausfall während der Show
+function prüfeTechnischerAusfall(
+  anfrage: Anfrage,
+  venue: Venue
+): { ereignis: Ereignis; chance: number } | null {
+  const bedarfe = ermittleAlleEquipmentBedarfe(anfrage.genre, venue.equipmentBestand)
+  const betroffen = bedarfe.some(
+    (b) => (b.kategorie === 'PA' || b.kategorie === 'Signal') && b.bedarf > 0
+  )
+  if (!betroffen) return null
+
+  return {
+    chance: 12,
+    ereignis: {
+      id: 'technischer-ausfall-show',
+      phase: 'show',
+      beschreibung: 'Ein technischer Defekt unterbricht kurz den Sound.',
+      reaktionA: {
+        label: 'Ersatzgerät holen (100€)',
+        effekt: { budgetDelta: -100 },
+      },
+      reaktionB: {
+        label: 'Improvisieren',
+        effekt: { scoreDelta: -15 },
+      },
+    },
+  }
+}
+
+// 11. Sicherheitsvorfall während der Show
+function prüfeSicherheitsvorfall(anfrage: Anfrage): { ereignis: Ereignis; chance: number } {
+  return {
+    chance: Math.min(15, Math.round(anfrage.erwarteteBesucherzahl / 100)),
+    ereignis: {
+      id: 'sicherheitsvorfall',
+      phase: 'show',
+      beschreibung: 'Gedränge vor der Bühne sorgt für einen kleinen Sicherheitsvorfall.',
+      reaktionA: {
+        label: 'Security nachfordern (150€)',
+        effekt: { budgetDelta: -150 },
+      },
+      reaktionB: {
+        label: 'Nichts tun',
+        effekt: { scoreDelta: -20 },
+      },
+    },
+  }
+}
+
+// 12. Zugabe-Wunsch des Publikums
+function prüfeZugabeWunsch(anfrage: Anfrage): { ereignis: Ereignis; chance: number } {
+  return {
+    chance: 12,
+    ereignis: {
+      id: 'zugabe-wunsch',
+      phase: 'show',
+      beschreibung: 'Das Publikum fordert lautstark eine Zugabe.',
+      reaktionA: {
+        label: 'Zugabe spielen',
+        effekt: {
+          reputationDelta: 3,
+          moralDeltaZufälligerTechniker: -5,
+          budgetDelta: Math.round(anfrage.gage * 0.05),
+        },
+      },
+      reaktionB: {
+        label: 'Höflich ablehnen',
+        effekt: {},
+      },
+    },
+  }
+}
+
+// 13. Transportschaden beim Abbau
+function prüfeTransportschaden(): { ereignis: Ereignis; chance: number } {
+  return {
+    chance: 10,
+    ereignis: {
+      id: 'transportschaden',
+      phase: 'abbau',
+      beschreibung: 'Beim Verladen wird ein Equipment-Teil beschädigt.',
+      reaktionA: {
+        label: 'Sofort reparieren (100€)',
+        effekt: { budgetDelta: -100 },
+      },
+      reaktionB: {
+        label: 'Auf später verschieben',
+        effekt: { reputationDelta: -2 },
+      },
+    },
+  }
+}
+
+// 14. Verlorenes Equipment beim Abbau
+function prüfeVerlorenesEquipment(): { ereignis: Ereignis; chance: number } {
+  return {
+    chance: 8,
+    ereignis: {
+      id: 'verlorenes-equipment',
+      phase: 'abbau',
+      beschreibung: 'Ein kleines Equipment-Teil ist beim Abbau verschwunden.',
+      reaktionA: {
+        label: 'Ersatz kaufen (120€)',
+        effekt: { budgetDelta: -120 },
+      },
+      reaktionB: {
+        label: 'Verlust hinnehmen',
+        effekt: { scoreDelta: -5 },
+      },
+    },
+  }
+}
+
+// 15. Überstunden beim Abbau
+function prüfeÜberstundenAbbau(): { ereignis: Ereignis; chance: number } {
+  return {
+    chance: 10,
+    ereignis: {
+      id: 'überstunden-abbau',
+      phase: 'abbau',
+      beschreibung: 'Der Abbau dauert länger als geplant.',
+      reaktionA: {
+        label: 'Zusätzliche Kraft engagieren (150€)',
+        effekt: { budgetDelta: -150 },
+      },
+      reaktionB: {
+        label: 'Team bleibt länger',
+        effekt: { moralDeltaZufälligerTechniker: -5 },
+      },
+    },
+  }
+}
+
 /**
- * Prüft alle 8 möglichen Zufallsereignisse für eine Show und liefert - falls
- * mindestens eines ausgelöst wurde - zufällig genau eines davon zurück
- * (nie mehrere gleichzeitig). Reaktions-Ereignisse benötigen eine
+ * Prüft alle für die gegebene Phase relevanten Zufallsereignisse einer Show
+ * und liefert - falls mindestens eines ausgelöst wurde - zufällig genau eines
+ * davon zurück (nie mehrere gleichzeitig). Reaktions-Ereignisse benötigen eine
  * Spielerentscheidung, automatische Ereignisse wenden ihren Effekt sofort an.
+ * Ersetzt die frühere `ermittleEreignis` (die keine Phasen kannte).
  */
-export function ermittleEreignis(
+export function ermittleEreignisFürPhase(
+  phase: EreignisPhase,
   anfrage: Anfrage,
   techniker: Techniker[],
   verleiher: Verleiher[],
   venue: Venue
 ): ErmittelesErgebnis | null {
-  const ausgelöste: ErmittelesErgebnis[] = []
-
   const kandidaten: { chance: number; ergebnis: ErmittelesErgebnis }[] = []
 
-  const verleiherVerzögerung = prüfeVerleiherLieferverzögerung(anfrage, techniker, verleiher)
-  if (verleiherVerzögerung) {
+  if (phase === 'aufbau') {
+    const verleiherVerzögerung = prüfeVerleiherLieferverzögerung(anfrage, techniker, verleiher)
+    if (verleiherVerzögerung) {
+      kandidaten.push({
+        chance: verleiherVerzögerung.chance,
+        ergebnis: { typ: 'reaktion', ereignis: verleiherVerzögerung.ereignis },
+      })
+    }
+
+    const technikerKrank = prüfeTechnikerKrank(anfrage, techniker)
+    if (technikerKrank) {
+      kandidaten.push({
+        chance: technikerKrank.chance,
+        ergebnis: { typ: 'reaktion', ereignis: technikerKrank.ereignis },
+      })
+    }
+
+    const riderÄnderung = prüfeRiderÄnderung(anfrage)
     kandidaten.push({
-      chance: verleiherVerzögerung.chance,
-      ergebnis: { typ: 'reaktion', ereignis: verleiherVerzögerung.ereignis },
+      chance: riderÄnderung.chance,
+      ergebnis: { typ: 'reaktion', ereignis: riderÄnderung.ereignis },
+    })
+
+    const eigenbestandDefekt = prüfeEigenbestandDefekt(anfrage, venue)
+    if (eigenbestandDefekt) {
+      kandidaten.push({
+        chance: eigenbestandDefekt.chance,
+        ergebnis: { typ: 'reaktion', ereignis: eigenbestandDefekt.ereignis },
+      })
+    }
+
+    const unerfahrenesPersonal = prüfeUnerfahrenesErsatzpersonal(anfrage, verleiher)
+    if (unerfahrenesPersonal) {
+      kandidaten.push({
+        chance: unerfahrenesPersonal.chance,
+        ergebnis: { typ: 'reaktion', ereignis: unerfahrenesPersonal.ereignis },
+      })
+    }
+
+    const terminverschiebung = prüfeTerminverschiebung(anfrage)
+    kandidaten.push({
+      chance: terminverschiebung.chance,
+      ergebnis: { typ: 'reaktion', ereignis: terminverschiebung.ereignis },
+    })
+
+    const parkplatzproblem = prüfeParkplatzproblem()
+    kandidaten.push({
+      chance: parkplatzproblem.chance,
+      ergebnis: { typ: 'reaktion', ereignis: parkplatzproblem.ereignis },
+    })
+  } else if (phase === 'show') {
+    const actUnkompliziert = prüfeActUnkompliziert(anfrage)
+    kandidaten.push({ chance: actUnkompliziert.chance, ergebnis: actUnkompliziert.ergebnis })
+
+    const publikumsandrang = prüfePublikumsandrang(anfrage, venue)
+    kandidaten.push({ chance: publikumsandrang.chance, ergebnis: publikumsandrang.ergebnis })
+
+    const technischerAusfall = prüfeTechnischerAusfall(anfrage, venue)
+    if (technischerAusfall) {
+      kandidaten.push({
+        chance: technischerAusfall.chance,
+        ergebnis: { typ: 'reaktion', ereignis: technischerAusfall.ereignis },
+      })
+    }
+
+    const sicherheitsvorfall = prüfeSicherheitsvorfall(anfrage)
+    kandidaten.push({
+      chance: sicherheitsvorfall.chance,
+      ergebnis: { typ: 'reaktion', ereignis: sicherheitsvorfall.ereignis },
+    })
+
+    const zugabeWunsch = prüfeZugabeWunsch(anfrage)
+    kandidaten.push({
+      chance: zugabeWunsch.chance,
+      ergebnis: { typ: 'reaktion', ereignis: zugabeWunsch.ereignis },
+    })
+  } else {
+    const transportschaden = prüfeTransportschaden()
+    kandidaten.push({
+      chance: transportschaden.chance,
+      ergebnis: { typ: 'reaktion', ereignis: transportschaden.ereignis },
+    })
+
+    const verlorenesEquipment = prüfeVerlorenesEquipment()
+    kandidaten.push({
+      chance: verlorenesEquipment.chance,
+      ergebnis: { typ: 'reaktion', ereignis: verlorenesEquipment.ereignis },
+    })
+
+    const überstundenAbbau = prüfeÜberstundenAbbau()
+    kandidaten.push({
+      chance: überstundenAbbau.chance,
+      ergebnis: { typ: 'reaktion', ereignis: überstundenAbbau.ereignis },
     })
   }
 
-  const technikerKrank = prüfeTechnikerKrank(anfrage, techniker)
-  if (technikerKrank) {
-    kandidaten.push({
-      chance: technikerKrank.chance,
-      ergebnis: { typ: 'reaktion', ereignis: technikerKrank.ereignis },
-    })
-  }
-
-  const riderÄnderung = prüfeRiderÄnderung(anfrage)
-  kandidaten.push({
-    chance: riderÄnderung.chance,
-    ergebnis: { typ: 'reaktion', ereignis: riderÄnderung.ereignis },
-  })
-
-  const eigenbestandDefekt = prüfeEigenbestandDefekt(anfrage, venue)
-  if (eigenbestandDefekt) {
-    kandidaten.push({
-      chance: eigenbestandDefekt.chance,
-      ergebnis: { typ: 'reaktion', ereignis: eigenbestandDefekt.ereignis },
-    })
-  }
-
-  const unerfahrenesPersonal = prüfeUnerfahrenesErsatzpersonal(anfrage, verleiher)
-  if (unerfahrenesPersonal) {
-    kandidaten.push({
-      chance: unerfahrenesPersonal.chance,
-      ergebnis: { typ: 'reaktion', ereignis: unerfahrenesPersonal.ereignis },
-    })
-  }
-
-  const terminverschiebung = prüfeTerminverschiebung(anfrage)
-  kandidaten.push({
-    chance: terminverschiebung.chance,
-    ergebnis: { typ: 'reaktion', ereignis: terminverschiebung.ereignis },
-  })
-
-  const actUnkompliziert = prüfeActUnkompliziert(anfrage)
-  kandidaten.push({ chance: actUnkompliziert.chance, ergebnis: actUnkompliziert.ergebnis })
-
-  const publikumsandrang = prüfePublikumsandrang(anfrage, venue)
-  kandidaten.push({ chance: publikumsandrang.chance, ergebnis: publikumsandrang.ergebnis })
-
+  const ausgelöste: ErmittelesErgebnis[] = []
   for (const kandidat of kandidaten) {
     if (Math.random() * 100 < kandidat.chance) {
       ausgelöste.push(kandidat.ergebnis)

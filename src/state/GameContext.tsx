@@ -1,10 +1,16 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react'
 import { anfragen, techniker, venue, verleiher } from '@/data/dummyData'
-import { ermittleEreignis, type Ereignis, type EreignisEffekt } from '@/logic/ereignisse'
+import {
+  ermittleEreignisFürPhase,
+  type Ereignis,
+  type EreignisEffekt,
+  type EreignisPhase,
+} from '@/logic/ereignisse'
 import {
   berechneAuflösung,
   berechneAuswirkungen,
   geschätzteShowStunden,
+  phasenStunden,
   type AuflösungsErgebnis,
 } from '@/logic/showAuflösung'
 import type {
@@ -16,12 +22,15 @@ import type {
   Verleiher,
 } from '@/types'
 
-export { geschätzteShowStunden }
+export { geschätzteShowStunden, phasenStunden }
 
-export type View = 'dashboard' | 'staffing' | 'auflösung' | 'ereignis'
+export type View = 'dashboard' | 'staffing' | 'ablauf' | 'ereignis' | 'auflösung'
 
 const GUT_SCHWELLE = 80
 const MITTEL_SCHWELLE = 50
+
+/** Tempo der simulierten Show-Uhr: 1 Spielminute = 0,5 Echtsekunden. */
+export const SEKUNDEN_PRO_SPIELSTUNDE = 30
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -29,6 +38,39 @@ function clamp(value: number, min: number, max: number): number {
 
 function formatDelta(delta: number): string {
   return `${delta >= 0 ? '+' : ''}${delta}`
+}
+
+/** Ein während des Ablaufs gesammeltes Ereignis samt Effekt, bis zur finalen Auflösung. */
+export interface GesammeltesEreignis {
+  effekt: EreignisEffekt
+  beschreibung: string
+  phase: EreignisPhase
+}
+
+/**
+ * Laufzeit-Status eines aktiven Show-Ablaufs (Aufbau → Soundcheck-Gate → Show →
+ * Abbau → Auflösung). Wird NICHT persistiert (wie aktivesEreignis) - beim Laden/
+ * Neustart immer null. Die Uhr läuft rein zeitbasiert (Date.now()), unabhängig
+ * von der aktuell angezeigten View.
+ */
+export interface AblaufStatus {
+  act: string
+  /** Date.now() ms bei Start; wird bei Pausen um die Pausendauer nach vorne verschoben. */
+  startZeitpunkt: number
+  /** Date.now() ms, seit dem pausiert ist (Reaktion/Soundcheck aussteht), sonst null. */
+  pausiertSeit: number | null
+  pausierGrund: 'soundcheck' | 'ereignis' | null
+  /** Kumulierte Sekunden seit Start, an denen die jeweilige Phase endet. */
+  aufbauEndeSekunde: number
+  showEndeSekunde: number
+  abbauEndeSekunde: number
+  /** Zufälliger Zeitpunkt (Sekunden seit Start) für den Ereignis-Check je Phase. */
+  ereignisZeitpunkte: { aufbau: number; show: number; abbau: number }
+  ereignisGeprüft: { aufbau: boolean; show: boolean; abbau: boolean }
+  soundcheckBestätigt: boolean
+  gesammelteEreignisse: GesammeltesEreignis[]
+  /** Phase, zu der ein aktuell aktives Reaktions-Ereignis (aktivesEreignis) gehört. */
+  aktuellePhaseFürEreignis: EreignisPhase | null
 }
 
 export interface AuflösungsAnzeige {
@@ -51,6 +93,8 @@ export interface GameState {
   zwangsentlassungAusstehend: boolean
   /** Aktuell zur Reaktion anstehendes Zufallsereignis (view === 'ereignis'), sonst null. */
   aktivesEreignis: Ereignis | null
+  /** Laufzeit-Status des aktiven Show-Ablaufs (Aufbau/Show/Abbau), sonst null. Nicht persistiert. */
+  ablaufStatus: AblaufStatus | null
 }
 
 type GameAction =
@@ -64,18 +108,31 @@ type GameAction =
       kategorie: EquipmentKategorie
       name: string | null
     }
-  | {
-      type: 'RESOLVE_SHOW'
-      act: string
-      ereignisEffekt?: EreignisEffekt
-      ereignisBeschreibung?: string
-    }
   | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
   | { type: 'WOCHE_ABSCHLIESSEN' }
   | { type: 'ENTLASSEN'; name: string }
-  | { type: 'EREIGNIS_AUFGETRETEN'; ereignis: Ereignis }
+  | {
+      type: 'ABLAUF_STARTEN'
+      act: string
+      aufbauEndeSekunde: number
+      showEndeSekunde: number
+      abbauEndeSekunde: number
+      ereignisZeitpunkte: { aufbau: number; show: number; abbau: number }
+    }
+  | { type: 'SOUNDCHECK_ERREICHT' }
+  | { type: 'SOUNDCHECK_BESTÄTIGEN' }
+  | { type: 'SOUNDCHECK_ABBRECHEN' }
+  | { type: 'EREIGNIS_GEPRÜFT'; phase: EreignisPhase }
+  | {
+      type: 'EREIGNIS_AUTOMATISCH_ANGEWENDET'
+      phase: EreignisPhase
+      beschreibung: string
+      effekt: EreignisEffekt
+    }
+  | { type: 'EREIGNIS_AUFGETRETEN'; ereignis: Ereignis; phase: EreignisPhase }
   | { type: 'EREIGNIS_REAGIEREN'; reaktion: 'A' | 'B' }
+  | { type: 'ABLAUF_ABSCHLIESSEN' }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -125,6 +182,7 @@ export function baueNeuenSpielstand(): GameState {
     minusWochenInFolge: 0,
     zwangsentlassungAusstehend: false,
     aktivesEreignis: null,
+    ablaufStatus: null,
   }
 }
 
@@ -201,6 +259,7 @@ export function ladeGespeichertenSpielstand(): GameState | null {
       activeShowAct: null,
       letzteAuflösung: null,
       aktivesEreignis: null,
+      ablaufStatus: null,
       // Fehlen bei älteren Spielständen ohne diese Felder - mit Default auffüllen.
       minusWochenInFolge:
         typeof geparst.minusWochenInFolge === 'number' ? geparst.minusWochenInFolge : 0,
@@ -236,30 +295,25 @@ function updateShow(
 
 /**
  * Führt die eigentliche Show-Auflösung durch (Berechnung + Auswirkungen) und
- * verrechnet optional den Effekt eines zuvor aufgetretenen Zufallsereignisses.
- * Wird von RESOLVE_SHOW (kein Ereignis oder automatisches Ereignis) und von
- * EREIGNIS_REAGIEREN (Reaktions-Ereignis nach Spielerentscheidung) genutzt.
- * Ohne ereignisEffekt/ereignisBeschreibung ist das Ergebnis identisch zur
- * bisherigen RESOLVE_SHOW-Logik.
+ * verrechnet die Effekte aller während des Ablaufs (Aufbau/Show/Abbau)
+ * aufgetretenen Zufallsereignisse. Wird von ABLAUF_ABSCHLIESSEN aufgerufen,
+ * nachdem alle drei Phasen durchlaufen wurden. Ohne Ereignisse (leeres Array,
+ * Default) ist das Ergebnis identisch zur reinen Basis-Auflösung.
  */
 function führeShowAuflösungDurch(
   state: GameState,
   act: string,
-  ereignisEffekt?: EreignisEffekt,
-  ereignisBeschreibung?: string
+  ereignisse: GesammeltesEreignis[] = []
 ): GameState {
   const show = state.shows.find((s) => s.act === act)
   if (!show) return state
 
   const rohErgebnis = berechneAuflösung(show, state.techniker, state.verleiher, state.venue)
 
+  const scoreDeltaSumme = ereignisse.reduce((summe, e) => summe + (e.effekt.scoreDelta ?? 0), 0)
   let ergebnis = rohErgebnis
-  if (ereignisEffekt?.scoreDelta !== undefined) {
-    const neueGesamtpunktzahl = clamp(
-      rohErgebnis.gesamtpunktzahl + ereignisEffekt.scoreDelta,
-      0,
-      100
-    )
+  if (scoreDeltaSumme !== 0) {
+    const neueGesamtpunktzahl = clamp(rohErgebnis.gesamtpunktzahl + scoreDeltaSumme, 0, 100)
     const neueKategorie =
       neueGesamtpunktzahl >= GUT_SCHWELLE
         ? 'gut'
@@ -276,36 +330,41 @@ function führeShowAuflösungDurch(
     auswirkungen: basisAuswirkungen,
   } = berechneAuswirkungen(show, ergebnis, state.venue, state.techniker, state.verleiher)
 
-  const auswirkungen = [...basisAuswirkungen]
-  if (ereignisBeschreibung) {
-    auswirkungen.unshift(`Ereignis: ${ereignisBeschreibung}`)
-  }
+  // Ereignis-Beschreibungen zuerst, in chronologischer Reihenfolge (aufbau→show→abbau,
+  // da gesammelteEreignisse in dieser Reihenfolge befüllt wird), dann die Basis-Auswirkungen.
+  const auswirkungen = [
+    ...ereignisse.map((e) => `Ereignis (${e.phase}): ${e.beschreibung}`),
+    ...basisAuswirkungen,
+  ]
 
   let neuesVenue = venueNachAuswirkungen
-  if (ereignisEffekt?.budgetDelta !== undefined) {
-    neuesVenue = { ...neuesVenue, budget: neuesVenue.budget + ereignisEffekt.budgetDelta }
-    auswirkungen.push(`Budget ${formatDelta(ereignisEffekt.budgetDelta)}€ (Ereignis)`)
-  }
-  if (ereignisEffekt?.reputationDelta !== undefined) {
-    neuesVenue = {
-      ...neuesVenue,
-      reputation: clamp(neuesVenue.reputation + ereignisEffekt.reputationDelta, 0, 100),
-    }
-    auswirkungen.push(`Reputation ${formatDelta(ereignisEffekt.reputationDelta)} (Ereignis)`)
-  }
-
   let neueTechniker = technikerNachAuswirkungen
-  if (ereignisEffekt?.moralDeltaZufälligerTechniker !== undefined) {
-    const zugewiesen = Object.values(show.zugewieseneTechniker).filter(
-      (n): n is string => !!n
-    )
-    if (zugewiesen.length > 0) {
-      const name = zugewiesen[Math.floor(Math.random() * zugewiesen.length)]
-      const delta = ereignisEffekt.moralDeltaZufälligerTechniker
-      neueTechniker = neueTechniker.map((t) =>
-        t.name === name ? { ...t, moral: clamp(t.moral + delta, 0, 100) } : t
+
+  for (const eintrag of ereignisse) {
+    const { effekt } = eintrag
+    if (effekt.budgetDelta !== undefined) {
+      neuesVenue = { ...neuesVenue, budget: neuesVenue.budget + effekt.budgetDelta }
+      auswirkungen.push(`Budget ${formatDelta(effekt.budgetDelta)}€ (Ereignis)`)
+    }
+    if (effekt.reputationDelta !== undefined) {
+      neuesVenue = {
+        ...neuesVenue,
+        reputation: clamp(neuesVenue.reputation + effekt.reputationDelta, 0, 100),
+      }
+      auswirkungen.push(`Reputation ${formatDelta(effekt.reputationDelta)} (Ereignis)`)
+    }
+    if (effekt.moralDeltaZufälligerTechniker !== undefined) {
+      const zugewiesen = Object.values(show.zugewieseneTechniker).filter(
+        (n): n is string => !!n
       )
-      auswirkungen.push(`${name}: Moral ${formatDelta(delta)} (Ereignis)`)
+      if (zugewiesen.length > 0) {
+        const name = zugewiesen[Math.floor(Math.random() * zugewiesen.length)]
+        const delta = effekt.moralDeltaZufälligerTechniker
+        neueTechniker = neueTechniker.map((t) =>
+          t.name === name ? { ...t, moral: clamp(t.moral + delta, 0, 100) } : t
+        )
+        auswirkungen.push(`${name}: Moral ${formatDelta(delta)} (Ereignis)`)
+      }
     }
   }
 
@@ -409,25 +468,134 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         })),
       }
 
-    case 'RESOLVE_SHOW':
-      return führeShowAuflösungDurch(
-        state,
-        action.act,
-        action.ereignisEffekt,
-        action.ereignisBeschreibung
-      )
+    case 'ABLAUF_STARTEN':
+      return {
+        ...state,
+        activeShowAct: action.act,
+        view: 'ablauf',
+        ablaufStatus: {
+          act: action.act,
+          startZeitpunkt: Date.now(),
+          pausiertSeit: null,
+          pausierGrund: null,
+          aufbauEndeSekunde: action.aufbauEndeSekunde,
+          showEndeSekunde: action.showEndeSekunde,
+          abbauEndeSekunde: action.abbauEndeSekunde,
+          ereignisZeitpunkte: action.ereignisZeitpunkte,
+          ereignisGeprüft: { aufbau: false, show: false, abbau: false },
+          soundcheckBestätigt: false,
+          gesammelteEreignisse: [],
+          aktuellePhaseFürEreignis: null,
+        },
+      }
 
-    case 'EREIGNIS_AUFGETRETEN':
-      return { ...state, aktivesEreignis: action.ereignis, view: 'ereignis' }
+    case 'SOUNDCHECK_ERREICHT': {
+      if (!state.ablaufStatus) return state
+      return {
+        ...state,
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          pausiertSeit: Date.now(),
+          pausierGrund: 'soundcheck',
+        },
+      }
+    }
+
+    case 'SOUNDCHECK_BESTÄTIGEN': {
+      if (!state.ablaufStatus || state.ablaufStatus.pausiertSeit === null) return state
+      return {
+        ...state,
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          soundcheckBestätigt: true,
+          startZeitpunkt:
+            state.ablaufStatus.startZeitpunkt + (Date.now() - state.ablaufStatus.pausiertSeit),
+          pausiertSeit: null,
+          pausierGrund: null,
+        },
+      }
+    }
+
+    case 'SOUNDCHECK_ABBRECHEN':
+      return { ...state, ablaufStatus: null, view: 'staffing' }
+
+    case 'EREIGNIS_GEPRÜFT': {
+      if (!state.ablaufStatus) return state
+      return {
+        ...state,
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          ereignisGeprüft: { ...state.ablaufStatus.ereignisGeprüft, [action.phase]: true },
+        },
+      }
+    }
+
+    case 'EREIGNIS_AUTOMATISCH_ANGEWENDET': {
+      if (!state.ablaufStatus) return state
+      return {
+        ...state,
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          ereignisGeprüft: { ...state.ablaufStatus.ereignisGeprüft, [action.phase]: true },
+          gesammelteEreignisse: [
+            ...state.ablaufStatus.gesammelteEreignisse,
+            { effekt: action.effekt, beschreibung: action.beschreibung, phase: action.phase },
+          ],
+        },
+      }
+    }
+
+    case 'EREIGNIS_AUFGETRETEN': {
+      if (!state.ablaufStatus) return state
+      return {
+        ...state,
+        aktivesEreignis: action.ereignis,
+        view: 'ereignis',
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          ereignisGeprüft: { ...state.ablaufStatus.ereignisGeprüft, [action.phase]: true },
+          pausiertSeit: Date.now(),
+          pausierGrund: 'ereignis',
+          aktuellePhaseFürEreignis: action.phase,
+        },
+      }
+    }
 
     case 'EREIGNIS_REAGIEREN': {
       const ereignis = state.aktivesEreignis
       if (!ereignis) return state
-      if (!state.activeShowAct) return state
+      if (!state.ablaufStatus || state.ablaufStatus.pausiertSeit === null) return state
 
       const reaktion = action.reaktion === 'A' ? ereignis.reaktionA : ereignis.reaktionB
+      const phase = state.ablaufStatus.aktuellePhaseFürEreignis ?? 'aufbau'
 
-      return führeShowAuflösungDurch(state, state.activeShowAct, reaktion.effekt, ereignis.beschreibung)
+      return {
+        ...state,
+        aktivesEreignis: null,
+        view: 'ablauf',
+        ablaufStatus: {
+          ...state.ablaufStatus,
+          startZeitpunkt:
+            state.ablaufStatus.startZeitpunkt + (Date.now() - state.ablaufStatus.pausiertSeit),
+          pausiertSeit: null,
+          pausierGrund: null,
+          aktuellePhaseFürEreignis: null,
+          gesammelteEreignisse: [
+            ...state.ablaufStatus.gesammelteEreignisse,
+            { effekt: reaktion.effekt, beschreibung: ereignis.beschreibung, phase },
+          ],
+        },
+      }
+    }
+
+    case 'ABLAUF_ABSCHLIESSEN': {
+      if (!state.ablaufStatus) return state
+      const neuerState = führeShowAuflösungDurch(
+        state,
+        state.ablaufStatus.act,
+        state.ablaufStatus.gesammelteEreignisse
+      )
+      return { ...neuerState, ablaufStatus: null }
     }
 
     case 'BACK_TO_DASHBOARD':
@@ -494,6 +662,10 @@ interface GameContextValue extends GameState {
   assignVerleiher: (act: string, kategorie: EquipmentKategorie, name: string | null) => void
   toggleÜberstunden: (act: string, rolle: TechnikerRolle, aktiv: boolean) => void
   resolveShow: (act: string) => void
+  /** Fortschritts-Tick der Show-Uhr; von einem globalen Interval regelmäßig aufzurufen. */
+  tickAblauf: () => void
+  soundcheckBestätigen: () => void
+  soundcheckAbbrechen: () => void
   ereignisReagieren: (reaktion: 'A' | 'B') => void
   backToDashboard: () => void
   wocheAbschliessen: () => void
@@ -535,30 +707,98 @@ export function GameProvider({
         const show = state.shows.find((s) => s.act === act)
         if (!show) return
 
-        const ereignisErgebnis = ermittleEreignis(
-          show,
-          state.techniker,
-          state.verleiher,
-          state.venue
-        )
+        const { aufbau, show: showStunden, abbau } = phasenStunden(show)
+        const aufbauSek = aufbau * SEKUNDEN_PRO_SPIELSTUNDE
+        const showSek = showStunden * SEKUNDEN_PRO_SPIELSTUNDE
+        const abbauSek = abbau * SEKUNDEN_PRO_SPIELSTUNDE
 
-        if (!ereignisErgebnis) {
-          dispatch({ type: 'RESOLVE_SHOW', act })
-          return
+        const aufbauEndeSekunde = aufbauSek
+        const showEndeSekunde = aufbauSek + showSek
+        const abbauEndeSekunde = aufbauSek + showSek + abbauSek
+
+        const ereignisZeitpunkte = {
+          aufbau: aufbauSek * (0.2 + Math.random() * 0.6),
+          show: aufbauSek + showSek * (0.2 + Math.random() * 0.6),
+          abbau: aufbauSek + showSek + abbauSek * (0.2 + Math.random() * 0.6),
         }
 
-        if (ereignisErgebnis.typ === 'automatisch') {
-          dispatch({
-            type: 'RESOLVE_SHOW',
-            act,
-            ereignisEffekt: ereignisErgebnis.effekt,
-            ereignisBeschreibung: ereignisErgebnis.beschreibung,
-          })
-          return
-        }
-
-        dispatch({ type: 'EREIGNIS_AUFGETRETEN', ereignis: ereignisErgebnis.ereignis })
+        dispatch({
+          type: 'ABLAUF_STARTEN',
+          act,
+          aufbauEndeSekunde,
+          showEndeSekunde,
+          abbauEndeSekunde,
+          ereignisZeitpunkte,
+        })
       },
+      tickAblauf: () => {
+        const status = state.ablaufStatus
+        if (!status || status.pausiertSeit !== null) return
+
+        const vergangeneSekunden = (Date.now() - status.startZeitpunkt) / 1000
+
+        // Soundcheck-Gate: Aufbau vorbei, aber noch nicht bestätigt -> pausieren.
+        if (
+          vergangeneSekunden >= status.aufbauEndeSekunde &&
+          !status.soundcheckBestätigt &&
+          status.pausierGrund === null
+        ) {
+          dispatch({ type: 'SOUNDCHECK_ERREICHT' })
+          return
+        }
+
+        // Aktuelle Phase ermitteln (show/abbau erst nach bestätigtem Soundcheck erreichbar).
+        let phase: EreignisPhase | 'fertig'
+        if (vergangeneSekunden < status.aufbauEndeSekunde) {
+          phase = 'aufbau'
+        } else if (!status.soundcheckBestätigt) {
+          // Aufbau fertig, wartet auf Soundcheck-Bestätigung - nichts weiter zu tun.
+          return
+        } else if (vergangeneSekunden < status.showEndeSekunde) {
+          phase = 'show'
+        } else if (vergangeneSekunden < status.abbauEndeSekunde) {
+          phase = 'abbau'
+        } else {
+          phase = 'fertig'
+        }
+
+        if (phase !== 'fertig') {
+          const ereignisZeitpunkt = status.ereignisZeitpunkte[phase]
+          const bereitsGeprüft = status.ereignisGeprüft[phase]
+          if (vergangeneSekunden >= ereignisZeitpunkt && !bereitsGeprüft) {
+            const show = state.shows.find((s) => s.act === status.act)
+            if (!show) return
+
+            const ergebnis = ermittleEreignisFürPhase(
+              phase,
+              show,
+              state.techniker,
+              state.verleiher,
+              state.venue
+            )
+
+            if (!ergebnis) {
+              dispatch({ type: 'EREIGNIS_GEPRÜFT', phase })
+            } else if (ergebnis.typ === 'automatisch') {
+              dispatch({
+                type: 'EREIGNIS_AUTOMATISCH_ANGEWENDET',
+                phase,
+                beschreibung: ergebnis.beschreibung,
+                effekt: ergebnis.effekt,
+              })
+            } else {
+              dispatch({ type: 'EREIGNIS_AUFGETRETEN', ereignis: ergebnis.ereignis, phase })
+            }
+            return
+          }
+        }
+
+        if (phase === 'fertig' && status.pausierGrund === null) {
+          dispatch({ type: 'ABLAUF_ABSCHLIESSEN' })
+        }
+      },
+      soundcheckBestätigen: () => dispatch({ type: 'SOUNDCHECK_BESTÄTIGEN' }),
+      soundcheckAbbrechen: () => dispatch({ type: 'SOUNDCHECK_ABBRECHEN' }),
       ereignisReagieren: (reaktion) => dispatch({ type: 'EREIGNIS_REAGIEREN', reaktion }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
       wocheAbschliessen: () => dispatch({ type: 'WOCHE_ABSCHLIESSEN' }),
