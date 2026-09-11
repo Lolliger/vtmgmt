@@ -17,6 +17,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 36,
     moral: 70,
+    gehalt: 900,
   },
   {
     name: 'Lukas Brandt',
@@ -27,6 +28,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 10,
     moral: 70,
+    gehalt: 650,
   },
   {
     name: 'Sophie Lang',
@@ -37,6 +39,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 34,
     moral: 70,
+    gehalt: 900,
   },
   {
     name: 'Ben Hoffmann',
@@ -47,6 +50,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 8,
     moral: 70,
+    gehalt: 400,
   },
   {
     name: 'Mira Keller',
@@ -57,6 +61,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 15,
     moral: 70,
+    gehalt: 650,
   },
   {
     name: 'Nina Vogel',
@@ -67,6 +72,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 38,
     moral: 70,
+    gehalt: 900,
   },
   {
     name: 'Tom Adler',
@@ -77,6 +83,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 5,
     moral: 70,
+    gehalt: 400,
   },
   {
     name: 'Felix Bauer',
@@ -87,6 +94,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 12,
     moral: 70,
+    gehalt: 1200,
   },
   {
     name: 'Katja Richter',
@@ -97,6 +105,7 @@ export const techniker: Techniker[] = [
     wochenstunden: 40,
     verplanteStunden: 20,
     moral: 70,
+    gehalt: 1500,
   },
 ]
 

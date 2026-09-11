@@ -272,12 +272,15 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         letzteAuflösung: null,
       }
 
-    case 'WOCHE_ABSCHLIESSEN':
+    case 'WOCHE_ABSCHLIESSEN': {
+      const gehaltssumme = state.techniker.reduce((summe, t) => summe + t.gehalt, 0)
       return {
         ...state,
         woche: state.woche + 1,
         techniker: state.techniker.map((t) => ({ ...t, verplanteStunden: 0 })),
+        venue: { ...state.venue, budget: state.venue.budget - gehaltssumme },
       }
+    }
 
     default:
       return state
@@ -296,6 +299,8 @@ interface GameContextValue extends GameState {
   wocheAbschliessen: () => void
   speichern: () => void
   activeShow: Anfrage | null
+  /** Summe der wöchentlichen Gehälter aller aktuellen Techniker (Abzug bei nächstem wocheAbschliessen()). */
+  wochenGehaltssumme: number
 }
 
 const GameContext = createContext<GameContextValue | null>(null)
@@ -311,9 +316,11 @@ export function GameProvider({
 
   const value = useMemo<GameContextValue>(() => {
     const activeShow = state.shows.find((s) => s.act === state.activeShowAct) ?? null
+    const wochenGehaltssumme = state.techniker.reduce((summe, t) => summe + t.gehalt, 0)
     return {
       ...state,
       activeShow,
+      wochenGehaltssumme,
       annehmen: (act) => dispatch({ type: 'ANNEHMEN', act }),
       ablehnen: (act) => dispatch({ type: 'ABLEHNEN', act }),
       openStaffing: (act) => dispatch({ type: 'OPEN_STAFFING', act }),

@@ -28,6 +28,8 @@ export interface Techniker {
   verplanteStunden: number
   /** Moral/Zustand, Skala 0-100. */
   moral: number
+  /** Wöchentliches Gehalt in Euro, abhängig von Stufe. */
+  gehalt: number
 }
 
 export type Preisniveau = 'günstig' | 'mittel' | 'premium'

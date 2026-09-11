@@ -41,6 +41,7 @@ export function Dashboard() {
     openStaffing,
     speichern,
     wocheAbschliessen,
+    wochenGehaltssumme,
   } = useGame()
   const [gespeichertHinweis, setGespeichertHinweis] = useState(false)
   const [neueWocheHinweis, setNeueWocheHinweis] = useState(false)
@@ -73,6 +74,9 @@ export function Dashboard() {
             {gespeichertHinweis && (
               <span className="text-sm text-muted-foreground">Gespeichert ✓</span>
             )}
+            <span className="text-sm text-muted-foreground">
+              Nächste Woche fällig: −{budgetFormatter.format(wochenGehaltssumme)} Gehälter
+            </span>
             <Button size="sm" onClick={handleWocheAbschliessen}>
               Woche abschließen
             </Button>
