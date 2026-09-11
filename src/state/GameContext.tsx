@@ -33,6 +33,10 @@ export interface GameState {
   view: View
   activeShowAct: string | null
   letzteAuflösung: AuflösungsAnzeige | null
+  /** Anzahl aufeinanderfolgender Wochen, in denen das Budget nach Gehaltsabzug negativ war. */
+  minusWochenInFolge: number
+  /** true, wenn der Spieler eine Zwangsentlassung durchführen muss (siehe ENTLASSEN). */
+  zwangsentlassungAusstehend: boolean
 }
 
 type GameAction =
@@ -50,6 +54,7 @@ type GameAction =
   | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
   | { type: 'WOCHE_ABSCHLIESSEN' }
+  | { type: 'ENTLASSEN'; name: string }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -59,6 +64,8 @@ interface GespeicherterSpielstand {
   verleiher: Verleiher[]
   shows: Anfrage[]
   woche: number
+  minusWochenInFolge: number
+  zwangsentlassungAusstehend: boolean
 }
 
 function istGespeicherterSpielstand(value: unknown): value is GespeicherterSpielstand {
@@ -86,6 +93,8 @@ export function baueNeuenSpielstand(): GameState {
     view: 'dashboard',
     activeShowAct: null,
     letzteAuflösung: null,
+    minusWochenInFolge: 0,
+    zwangsentlassungAusstehend: false,
   }
 }
 
@@ -127,6 +136,13 @@ export function ladeGespeichertenSpielstand(): GameState | null {
       view: 'dashboard',
       activeShowAct: null,
       letzteAuflösung: null,
+      // Fehlen bei älteren Spielständen ohne diese Felder - mit Default auffüllen.
+      minusWochenInFolge:
+        typeof geparst.minusWochenInFolge === 'number' ? geparst.minusWochenInFolge : 0,
+      zwangsentlassungAusstehend:
+        typeof geparst.zwangsentlassungAusstehend === 'boolean'
+          ? geparst.zwangsentlassungAusstehend
+          : false,
     }
   } catch (error) {
     console.warn('Gespeicherter Spielstand konnte nicht geladen werden:', error)
@@ -274,11 +290,43 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 
     case 'WOCHE_ABSCHLIESSEN': {
       const gehaltssumme = state.techniker.reduce((summe, t) => summe + t.gehalt, 0)
+      const neuesBudget = state.venue.budget - gehaltssumme
+
+      const minusWochenInFolge = neuesBudget < 0 ? state.minusWochenInFolge + 1 : 0
+
+      // Reputationsverlust nur genau beim Erreichen der zweiten Minus-Woche in Folge,
+      // nicht bei jeder weiteren Woche danach.
+      const reputation =
+        minusWochenInFolge === 2
+          ? Math.max(0, state.venue.reputation - 5)
+          : state.venue.reputation
+
+      // Bleibt true, bis eine Entlassung erfolgt (siehe ENTLASSEN) - wird hier also nicht
+      // zurückgesetzt, falls bereits ausstehend.
+      const zwangsentlassungAusstehend =
+        state.zwangsentlassungAusstehend || minusWochenInFolge >= 3
+
       return {
         ...state,
         woche: state.woche + 1,
         techniker: state.techniker.map((t) => ({ ...t, verplanteStunden: 0 })),
-        venue: { ...state.venue, budget: state.venue.budget - gehaltssumme },
+        venue: { ...state.venue, budget: neuesBudget, reputation },
+        minusWochenInFolge,
+        zwangsentlassungAusstehend,
+      }
+    }
+
+    case 'ENTLASSEN': {
+      // Nur relevant, wenn tatsächlich eine Zwangsentlassung aussteht (siehe
+      // WOCHE_ABSCHLIESSEN). Ohne ausstehende Krise bleibt der Techniker-Bestand
+      // unverändert, statt versehentlich freiwillige Entlassungen zuzulassen.
+      if (!state.zwangsentlassungAusstehend) return state
+
+      return {
+        ...state,
+        techniker: state.techniker.filter((t) => t.name !== action.name),
+        minusWochenInFolge: 0,
+        zwangsentlassungAusstehend: false,
       }
     }
 
@@ -297,6 +345,7 @@ interface GameContextValue extends GameState {
   resolveShow: (act: string) => void
   backToDashboard: () => void
   wocheAbschliessen: () => void
+  entlassen: (name: string) => void
   speichern: () => void
   activeShow: Anfrage | null
   /** Summe der wöchentlichen Gehälter aller aktuellen Techniker (Abzug bei nächstem wocheAbschliessen()). */
@@ -333,6 +382,7 @@ export function GameProvider({
       resolveShow: (act) => dispatch({ type: 'RESOLVE_SHOW', act }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
       wocheAbschliessen: () => dispatch({ type: 'WOCHE_ABSCHLIESSEN' }),
+      entlassen: (name) => dispatch({ type: 'ENTLASSEN', name }),
       speichern: () => {
         try {
           const spielstand: GespeicherterSpielstand = {
@@ -341,6 +391,8 @@ export function GameProvider({
             verleiher: state.verleiher,
             shows: state.shows,
             woche: state.woche,
+            minusWochenInFolge: state.minusWochenInFolge,
+            zwangsentlassungAusstehend: state.zwangsentlassungAusstehend,
           }
           localStorage.setItem(SPIELSTAND_KEY, JSON.stringify(spielstand))
         } catch (error) {

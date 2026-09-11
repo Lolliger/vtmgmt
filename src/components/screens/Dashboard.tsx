@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -42,6 +43,9 @@ export function Dashboard() {
     speichern,
     wocheAbschliessen,
     wochenGehaltssumme,
+    minusWochenInFolge,
+    zwangsentlassungAusstehend,
+    entlassen,
   } = useGame()
   const [gespeichertHinweis, setGespeichertHinweis] = useState(false)
   const [neueWocheHinweis, setNeueWocheHinweis] = useState(false)
@@ -63,6 +67,45 @@ export function Dashboard() {
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      {zwangsentlassungAusstehend && (
+        <Card className="border-destructive bg-destructive/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <TriangleAlert className="size-5" />
+              Zwangsentlassung erforderlich
+            </CardTitle>
+            <CardDescription className="text-destructive/90">
+              Das Budget ist seit {minusWochenInFolge} Wochen im Minus – eine
+              Entlassung ist unvermeidbar. Wähle eine:n Techniker:in aus, um
+              die Personalkosten zu senken.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {techniker.map((person) => (
+              <div
+                key={person.name}
+                className="flex items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-background p-3"
+              >
+                <div>
+                  <p className="font-medium">{person.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {person.rolle} · {person.stufe} ·{' '}
+                    {budgetFormatter.format(person.gehalt)} / Woche
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => entlassen(person.name)}
+                >
+                  Entlassen
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">{venue.name}</CardTitle>
@@ -94,9 +137,29 @@ export function Dashboard() {
             <Separator orientation="vertical" className="h-auto" />
             <div>
               <p className="text-sm text-muted-foreground">Budget</p>
-              <p className="text-2xl font-semibold">
-                {budgetFormatter.format(venue.budget)}
-              </p>
+              <div className="flex items-center gap-2">
+                <p
+                  className={
+                    venue.budget < 0
+                      ? 'text-2xl font-semibold text-destructive'
+                      : 'text-2xl font-semibold'
+                  }
+                >
+                  {budgetFormatter.format(venue.budget)}
+                </p>
+                {venue.budget < 0 && (
+                  <Badge variant="destructive" className="gap-1">
+                    <TriangleAlert className="size-3.5" />
+                    Budget im Minus
+                  </Badge>
+                )}
+              </div>
+              {venue.budget < 0 && minusWochenInFolge >= 1 && (
+                <p className="text-xs text-destructive">
+                  seit {minusWochenInFolge} Woche
+                  {minusWochenInFolge === 1 ? '' : 'n'} im Minus
+                </p>
+              )}
             </div>
             <Separator orientation="vertical" className="h-auto" />
             <div>
