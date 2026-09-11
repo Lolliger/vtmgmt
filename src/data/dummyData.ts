@@ -4,7 +4,7 @@ export const venue: Venue = {
   name: 'Halle 9',
   budget: 48200,
   reputation: 62,
-  equipmentBestand: { PA: 6, Licht: 5, Rigging: 3, IEM: 8 },
+  equipmentBestand: { PA: 6, Licht: 5, Rigging: 3, IEM: 8, Signal: 6 },
 }
 
 export const techniker: Techniker[] = [
@@ -64,7 +64,7 @@ export const anfragen: Anfrage[] = [
     gage: 4200,
     status: 'offen',
     zugewieseneTechniker: { FOH: null, Monitor: null, Licht: null, Rigging: null },
-    gewählterVerleiher: null,
+    gewählteVerleiherProKategorie: {},
     ergebnis: null,
   },
 ]

@@ -1,4 +1,4 @@
-export type EquipmentKategorie = 'PA' | 'Licht' | 'Rigging' | 'IEM'
+export type EquipmentKategorie = 'PA' | 'Licht' | 'Rigging' | 'IEM' | 'Signal'
 
 export interface Venue {
   name: string
@@ -48,6 +48,6 @@ export interface Anfrage {
   gage: number
   status: AnfrageStatus
   zugewieseneTechniker: Record<TechnikerRolle, string | null>
-  gewählterVerleiher: string | null
+  gewählteVerleiherProKategorie: Partial<Record<EquipmentKategorie, string | null>>
   ergebnis: Ergebnis | null
 }

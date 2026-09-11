@@ -72,7 +72,7 @@ export function AuflösungScreen() {
               Gesamtpunktzahl {ergebnis.gesamtpunktzahl} / 100
             </Badge>
             <Badge variant="outline">Staffing {ergebnis.staffingScore} / 100</Badge>
-            <Badge variant="outline">Verleiher {ergebnis.verleiherScore} / 100</Badge>
+            <Badge variant="outline">Equipment {ergebnis.equipmentScore} / 100</Badge>
             <Badge variant="outline">
               Zufall {ergebnis.zufallsfaktor >= 0 ? '+' : ''}
               {ergebnis.zufallsfaktor}

@@ -42,45 +42,60 @@ export function benötigteRollen(
   ][]
 }
 
-export interface EquipmentLücke {
+export interface EquipmentBedarfEintrag {
   kategorie: EquipmentKategorie
   bedarf: number
   bestand: number
+  gedeckt: number
+  lücke: number
 }
 
-/** Prüft, ob eine Rolle für ein Genre eine Equipment-Lücke gegenüber dem Venue-Bestand hat. */
-export function ermittleEquipmentLücke(
-  rolle: TechnikerRolle,
+/**
+ * Liefert alle für ein Genre relevanten Equipment-Kategorien mit summiertem Bedarf
+ * über alle benötigten Rollen dieses Genres (Bedarfe mehrerer Rollen in derselben
+ * Kategorie werden addiert).
+ */
+export function ermittleAlleEquipmentBedarfe(
   genre: Genre,
   equipmentBestand: Record<EquipmentKategorie, number>
-): EquipmentLücke | null {
-  const anforderung = GENRE_ANFORDERUNGEN[genre].rollen[rolle]
-  if (!anforderung?.equipmentBedarf) return null
-  for (const [kategorie, bedarf] of Object.entries(anforderung.equipmentBedarf) as [
-    EquipmentKategorie,
-    number,
-  ][]) {
-    const bestand = equipmentBestand[kategorie]
-    if (bedarf !== undefined && bedarf > bestand) {
-      return { kategorie, bedarf, bestand }
+): EquipmentBedarfEintrag[] {
+  const bedarfProKategorie = new Map<EquipmentKategorie, number>()
+
+  for (const [, anforderung] of benötigteRollen(genre)) {
+    if (!anforderung.equipmentBedarf) continue
+    for (const [kategorie, bedarf] of Object.entries(anforderung.equipmentBedarf) as [
+      EquipmentKategorie,
+      number,
+    ][]) {
+      if (bedarf === undefined) continue
+      bedarfProKategorie.set(kategorie, (bedarfProKategorie.get(kategorie) ?? 0) + bedarf)
     }
   }
-  return null
+
+  return Array.from(bedarfProKategorie.entries()).map(([kategorie, bedarf]) => {
+    const bestand = equipmentBestand[kategorie]
+    return {
+      kategorie,
+      bedarf,
+      bestand,
+      gedeckt: Math.min(bedarf, bestand),
+      lücke: Math.max(0, bedarf - bestand),
+    }
+  })
 }
 
-/** Prüft, ob die Show irgendeine Equipment-Lücke hat (Verleiher-Auswahl dann nötig). */
-export function hatEquipmentLücke(
-  genre: Genre,
-  equipmentBestand: Record<EquipmentKategorie, number>
-): boolean {
-  return benötigteRollen(genre).some(
-    ([rolle]) => ermittleEquipmentLücke(rolle, genre, equipmentBestand) !== null
-  )
+/** Gewichtung der Equipment-Kategorien für den Equipment-Score. */
+export const EQUIPMENT_KATEGORIE_GEWICHT: Record<EquipmentKategorie, number> = {
+  PA: 1.5,
+  Signal: 1.5,
+  Rigging: 1.25,
+  Licht: 1.0,
+  IEM: 1.0,
 }
 
 export interface AuflösungsErgebnis {
   staffingScore: number
-  verleiherScore: number
+  equipmentScore: number
   zufallsfaktor: number
   gesamtpunktzahl: number
   kategorie: Ergebnis
@@ -89,26 +104,33 @@ export interface AuflösungsErgebnis {
 
 function ermittleBegründung(params: {
   staffingScore: number
-  verleiherScore: number
+  equipmentScore: number
   zufallsfaktor: number
   schwächsteRolle: TechnikerRolle | null
-  verleiherName: string | null
+  schwächsteEquipmentKategorie: EquipmentKategorie | null
+  schwächsterVerleiherName: string | null
 }): string {
-  const { staffingScore, verleiherScore, zufallsfaktor, schwächsteRolle, verleiherName } =
-    params
+  const {
+    staffingScore,
+    equipmentScore,
+    zufallsfaktor,
+    schwächsteRolle,
+    schwächsteEquipmentKategorie,
+    schwächsterVerleiherName,
+  } = params
 
   const staffingIstSchwach = staffingScore < GUT_SCHWELLE
-  const verleiherIstSchwach = verleiherScore < GUT_SCHWELLE
+  const equipmentIstSchwach = equipmentScore < GUT_SCHWELLE
 
-  if (staffingIstSchwach && (staffingScore <= verleiherScore || !verleiherIstSchwach)) {
+  if (staffingIstSchwach && (staffingScore <= equipmentScore || !equipmentIstSchwach)) {
     return schwächsteRolle
       ? `Techniker ${schwächsteRolle} war für diese Show-Größe zu unerfahren.`
       : 'Das Team war für diese Show-Größe zu unerfahren.'
   }
 
-  if (verleiherIstSchwach) {
-    return verleiherName
-      ? `Verleiher ${verleiherName} hat nicht zuverlässig geliefert.`
+  if (equipmentIstSchwach) {
+    return schwächsteEquipmentKategorie && schwächsterVerleiherName
+      ? `Verleiher ${schwächsterVerleiherName} hat beim ${schwächsteEquipmentKategorie}-Equipment nicht zuverlässig geliefert.`
       : 'Ein Verleihpartner hat nicht zuverlässig geliefert.'
   }
 
@@ -123,7 +145,8 @@ function ermittleBegründung(params: {
 export function berechneAuflösung(
   anfrage: Anfrage,
   techniker: Techniker[],
-  verleiher: Verleiher[]
+  verleiher: Verleiher[],
+  venue: Venue
 ): AuflösungsErgebnis {
   const rollenEintraege = benötigteRollen(anfrage.genre)
 
@@ -159,33 +182,62 @@ export function berechneAuflösung(
 
   const staffingScore = rollenEintraege.length > 0 ? summe / rollenEintraege.length : 100
 
-  let verleiherScore = 100
-  let verleiherName: string | null = null
-  if (anfrage.gewählterVerleiher) {
-    const firma = verleiher.find((v) => v.name === anfrage.gewählterVerleiher)
-    if (firma) {
-      verleiherScore = firma.zuverlässigkeit
-      verleiherName = firma.name
+  const equipmentBedarfe = ermittleAlleEquipmentBedarfe(anfrage.genre, venue.equipmentBestand)
+
+  let gewichteteSumme = 0
+  let gewichtSumme = 0
+  let schwächsteEquipmentKategorie: EquipmentKategorie | null = null
+  let schwächsterVerleiherName: string | null = null
+  let schwächsterEquipmentScore = Infinity
+
+  for (const eintrag of equipmentBedarfe) {
+    const gewicht = EQUIPMENT_KATEGORIE_GEWICHT[eintrag.kategorie]
+    let score: number
+    let verleiherName: string | null = null
+
+    if (eintrag.lücke <= 0) {
+      score = 100
+    } else {
+      const gewählterName = anfrage.gewählteVerleiherProKategorie[eintrag.kategorie]
+      const firma = gewählterName ? verleiher.find((v) => v.name === gewählterName) : undefined
+      if (firma) {
+        score = firma.zuverlässigkeit
+        verleiherName = firma.name
+      } else {
+        score = 0
+      }
+
+      if (score < schwächsterEquipmentScore) {
+        schwächsterEquipmentScore = score
+        schwächsteEquipmentKategorie = eintrag.kategorie
+        schwächsterVerleiherName = verleiherName
+      }
     }
+
+    gewichteteSumme += gewicht * score
+    gewichtSumme += gewicht
   }
+
+  const equipmentScore = gewichtSumme > 0 ? gewichteteSumme / gewichtSumme : 100
 
   const zufallsfaktor = Math.round(Math.random() * 30 - 15)
 
-  const gesamt = clamp(staffingScore * 0.6 + verleiherScore * 0.4 + zufallsfaktor, 0, 100)
+  const gesamt = clamp(staffingScore * 0.6 + equipmentScore * 0.4 + zufallsfaktor, 0, 100)
 
   const kategorie: Ergebnis = gesamt >= 80 ? 'gut' : gesamt >= 50 ? 'mittel' : 'problematisch'
 
   const begründung = ermittleBegründung({
     staffingScore,
-    verleiherScore,
+    equipmentScore,
     zufallsfaktor,
     schwächsteRolle,
-    verleiherName,
+    schwächsteEquipmentKategorie,
+    schwächsterVerleiherName,
   })
 
   return {
     staffingScore: Math.round(staffingScore),
-    verleiherScore: Math.round(verleiherScore),
+    equipmentScore: Math.round(equipmentScore),
     zufallsfaktor,
     gesamtpunktzahl: Math.round(gesamt),
     kategorie,
@@ -215,16 +267,25 @@ export function berechneAuswirkungen(
   const neueReputation = clamp(venue.reputation + reputationDelta, 0, 100)
   auswirkungen.push(`Reputation ${formatDelta(reputationDelta)}`)
 
-  const verleihFirma = anfrage.gewählterVerleiher
-    ? (verleiher.find((v) => v.name === anfrage.gewählterVerleiher) ?? null)
-    : null
+  // Pro genutzter Verleiher-Kategorie: Verleiher + Einzel-Score ermitteln
+  // (Einzel-Score = Zuverlässigkeit der Firma, für die Beziehungs-Anpassung).
+  const genutzteVerleiherEintraege: { firma: Verleiher; score: number }[] = []
+  for (const [, name] of Object.entries(anfrage.gewählteVerleiherProKategorie) as [
+    EquipmentKategorie,
+    string | null,
+  ][]) {
+    if (!name) continue
+    const firma = verleiher.find((v) => v.name === name)
+    if (!firma) continue
+    genutzteVerleiherEintraege.push({ firma, score: firma.zuverlässigkeit })
+  }
 
   let budgetDelta = anfrage.gage
   auswirkungen.push(`Budget +${formatCurrency(anfrage.gage)} (Gage)`)
-  if (verleihFirma) {
-    budgetDelta -= verleihFirma.verleihkostenPauschale
+  for (const { firma } of genutzteVerleiherEintraege) {
+    budgetDelta -= firma.verleihkostenPauschale
     auswirkungen.push(
-      `Budget -${formatCurrency(verleihFirma.verleihkostenPauschale)} (Verleih ${verleihFirma.name})`
+      `Budget -${formatCurrency(firma.verleihkostenPauschale)} (Verleih ${firma.name})`
     )
   }
   const neuesBudget = venue.budget + budgetDelta
@@ -242,15 +303,19 @@ export function berechneAuswirkungen(
   })
 
   let neueVerleiher = verleiher
-  if (verleihFirma) {
-    const beziehungDelta =
-      ergebnis.verleiherScore >= 80 ? 5 : ergebnis.verleiherScore >= 50 ? 0 : -8
+  if (genutzteVerleiherEintraege.length > 0) {
+    const beziehungDeltaProFirma = new Map<string, number>()
+    for (const { firma, score } of genutzteVerleiherEintraege) {
+      const delta = score >= 80 ? 5 : score >= 50 ? 0 : -8
+      beziehungDeltaProFirma.set(firma.name, delta)
+    }
     neueVerleiher = verleiher.map((v) => {
-      if (v.name !== verleihFirma.name) return v
-      const neu = clamp(v.beziehung + beziehungDelta, 0, 100)
+      const delta = beziehungDeltaProFirma.get(v.name)
+      if (delta === undefined) return v
+      const neu = clamp(v.beziehung + delta, 0, 100)
+      auswirkungen.push(`${v.name}: Beziehung ${formatDelta(delta)}`)
       return { ...v, beziehung: neu }
     })
-    auswirkungen.push(`${verleihFirma.name}: Beziehung ${formatDelta(beziehungDelta)}`)
   }
 
   return {

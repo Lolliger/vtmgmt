@@ -5,7 +5,14 @@ import {
   berechneAuswirkungen,
   type AuflösungsErgebnis,
 } from '@/logic/showAuflösung'
-import type { Anfrage, Techniker, TechnikerRolle, Venue, Verleiher } from '@/types'
+import type {
+  Anfrage,
+  EquipmentKategorie,
+  Techniker,
+  TechnikerRolle,
+  Venue,
+  Verleiher,
+} from '@/types'
 
 export type View = 'dashboard' | 'staffing' | 'auflösung'
 
@@ -29,7 +36,12 @@ type GameAction =
   | { type: 'ABLEHNEN'; act: string }
   | { type: 'OPEN_STAFFING'; act: string }
   | { type: 'ASSIGN_TECHNIKER'; act: string; rolle: TechnikerRolle; name: string | null }
-  | { type: 'ASSIGN_VERLEIHER'; act: string; name: string | null }
+  | {
+      type: 'ASSIGN_VERLEIHER'
+      act: string
+      kategorie: EquipmentKategorie
+      name: string | null
+    }
   | { type: 'RESOLVE_SHOW'; act: string }
   | { type: 'BACK_TO_DASHBOARD' }
 
@@ -91,7 +103,10 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         shows: updateShow(state.shows, action.act, (show) => ({
           ...show,
-          gewählterVerleiher: action.name,
+          gewählteVerleiherProKategorie: {
+            ...show.gewählteVerleiherProKategorie,
+            [action.kategorie]: action.name,
+          },
         })),
       }
 
@@ -99,7 +114,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const show = state.shows.find((s) => s.act === action.act)
       if (!show) return state
 
-      const ergebnis = berechneAuflösung(show, state.techniker, state.verleiher)
+      const ergebnis = berechneAuflösung(show, state.techniker, state.verleiher, state.venue)
       const {
         venue: neuesVenue,
         techniker: neueTechniker,
@@ -140,7 +155,7 @@ interface GameContextValue extends GameState {
   ablehnen: (act: string) => void
   openStaffing: (act: string) => void
   assignTechniker: (act: string, rolle: TechnikerRolle, name: string | null) => void
-  assignVerleiher: (act: string, name: string | null) => void
+  assignVerleiher: (act: string, kategorie: EquipmentKategorie, name: string | null) => void
   resolveShow: (act: string) => void
   backToDashboard: () => void
   activeShow: Anfrage | null
@@ -161,7 +176,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       openStaffing: (act) => dispatch({ type: 'OPEN_STAFFING', act }),
       assignTechniker: (act, rolle, name) =>
         dispatch({ type: 'ASSIGN_TECHNIKER', act, rolle, name }),
-      assignVerleiher: (act, name) => dispatch({ type: 'ASSIGN_VERLEIHER', act, name }),
+      assignVerleiher: (act, kategorie, name) =>
+        dispatch({ type: 'ASSIGN_VERLEIHER', act, kategorie, name }),
       resolveShow: (act) => dispatch({ type: 'RESOLVE_SHOW', act }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
     }

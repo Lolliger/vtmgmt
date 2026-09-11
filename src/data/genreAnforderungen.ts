@@ -19,7 +19,11 @@ export const GENRE_ANFORDERUNGEN: Record<
 > = {
   'Metal/Rock': {
     rollen: {
-      FOH: { schwierigkeit: 'hoch', minStufe: 'Senior', equipmentBedarf: { PA: 5 } },
+      FOH: {
+        schwierigkeit: 'hoch',
+        minStufe: 'Senior',
+        equipmentBedarf: { PA: 5, Signal: 6 },
+      },
       Monitor: {
         schwierigkeit: 'hoch',
         minStufe: 'Senior',
@@ -42,7 +46,7 @@ export const GENRE_ANFORDERUNGEN: Record<
       FOH: {
         schwierigkeit: 'mittel',
         minStufe: 'Techniker',
-        equipmentBedarf: { PA: 6 },
+        equipmentBedarf: { PA: 6, Signal: 5 },
       },
       Monitor: {
         schwierigkeit: 'mittel',
@@ -66,7 +70,7 @@ export const GENRE_ANFORDERUNGEN: Record<
       FOH: {
         schwierigkeit: 'niedrig',
         minStufe: 'Trainee',
-        equipmentBedarf: { PA: 2 },
+        equipmentBedarf: { PA: 2, Signal: 2 },
       },
       Monitor: {
         schwierigkeit: 'niedrig',
@@ -82,7 +86,11 @@ export const GENRE_ANFORDERUNGEN: Record<
   },
   'Hip-Hop/Rap': {
     rollen: {
-      FOH: { schwierigkeit: 'hoch', minStufe: 'Senior', equipmentBedarf: { PA: 7 } },
+      FOH: {
+        schwierigkeit: 'hoch',
+        minStufe: 'Senior',
+        equipmentBedarf: { PA: 7, Signal: 5 },
+      },
       Monitor: {
         schwierigkeit: 'mittel',
         minStufe: 'Techniker',

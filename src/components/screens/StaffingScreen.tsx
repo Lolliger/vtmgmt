@@ -11,9 +11,9 @@ import {
 import { cn } from '@/lib/utils'
 import { budgetFormatter, dateFormatter } from '@/lib/format'
 import type { Schwierigkeit } from '@/data/genreAnforderungen'
-import { benötigteRollen, ermittleEquipmentLücke, type EquipmentLücke } from '@/logic/showAuflösung'
+import { benötigteRollen, ermittleAlleEquipmentBedarfe } from '@/logic/showAuflösung'
 import { useGame } from '@/state/GameContext'
-import type { Preisniveau, TechnikerRolle } from '@/types'
+import type { Preisniveau } from '@/types'
 
 const schwierigkeitVariant: Record<Schwierigkeit, 'outline' | 'secondary' | 'default'> = {
   niedrig: 'outline',
@@ -52,20 +52,13 @@ export function StaffingScreen() {
 
   const rollen = benötigteRollen(activeShow.genre)
 
-  const lücken = rollen
-    .map(([rolle]) => ({
-      rolle,
-      lücke: ermittleEquipmentLücke(rolle, activeShow.genre, venue.equipmentBestand),
-    }))
-    .filter(
-      (eintrag): eintrag is { rolle: TechnikerRolle; lücke: EquipmentLücke } =>
-        eintrag.lücke !== null
-    )
+  const equipmentBedarfe = ermittleAlleEquipmentBedarfe(activeShow.genre, venue.equipmentBestand)
 
   const alleRollenBesetzt = rollen.every(([rolle]) => !!activeShow.zugewieseneTechniker[rolle])
-  const verleiherNötig = lücken.length > 0
-  const verleiherAusgewählt = !!activeShow.gewählterVerleiher
-  const kannDurchführen = alleRollenBesetzt && (!verleiherNötig || verleiherAusgewählt)
+  const alleLückenGedeckt = equipmentBedarfe
+    .filter((eintrag) => eintrag.lücke > 0)
+    .every((eintrag) => !!activeShow.gewählteVerleiherProKategorie[eintrag.kategorie])
+  const kannDurchführen = alleRollenBesetzt && alleLückenGedeckt
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
@@ -91,7 +84,6 @@ export function StaffingScreen() {
       {rollen.map(([rolle, anforderung]) => {
         const kandidaten = techniker.filter((t) => t.rolle === rolle && t.verfügbar)
         const zugewiesen = activeShow.zugewieseneTechniker[rolle]
-        const rollenLücke = ermittleEquipmentLücke(rolle, activeShow.genre, venue.equipmentBestand)
 
         return (
           <Card key={rolle}>
@@ -102,12 +94,6 @@ export function StaffingScreen() {
                   {anforderung.schwierigkeit} · min. {anforderung.minStufe}
                 </Badge>
               </div>
-              {rollenLücke && (
-                <CardDescription className="text-amber-600 dark:text-amber-500">
-                  Equipment-Lücke: {rollenLücke.kategorie} – Bedarf {rollenLücke.bedarf} /
-                  Bestand {rollenLücke.bestand}
-                </CardDescription>
-              )}
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {kandidaten.length === 0 && (
@@ -148,41 +134,83 @@ export function StaffingScreen() {
         )
       })}
 
-      {verleiherNötig && (
+      {equipmentBedarfe.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Verleiher wählen</CardTitle>
+            <CardTitle>Equipment</CardTitle>
             <CardDescription>
-              Equipment-Lücke bei {lücken.map((l) => l.rolle).join(', ')} – eigener Bestand
-              reicht nicht aus.
+              Bedarf dieser Show je Kategorie – bei Lücken ist ein Verleiher zu wählen.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            {verleiher.map((firma) => {
-              const istAusgewählt = activeShow.gewählterVerleiher === firma.name
+          <CardContent className="flex flex-col gap-4">
+            {equipmentBedarfe.map((eintrag) => {
+              const hatLücke = eintrag.lücke > 0
+              const gewählterName = activeShow.gewählteVerleiherProKategorie[eintrag.kategorie]
+
               return (
-                <button
-                  key={firma.name}
-                  type="button"
-                  onClick={() => assignVerleiher(activeShow.act, istAusgewählt ? null : firma.name)}
-                  className={cn(
-                    'flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
-                    istAusgewählt
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                      : 'border-border'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium">{firma.name}</p>
-                    <Badge variant="outline">{preisniveauLabel[firma.preisniveau]}</Badge>
+                <div key={eintrag.kategorie} className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium">{eintrag.kategorie}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        Bedarf {eintrag.bedarf} · aus Bestand gedeckt {eintrag.gedeckt}
+                      </span>
+                      {hatLücke ? (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                        >
+                          Lücke {eintrag.lücke}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                        >
+                          aus Eigenbestand gedeckt
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Zuverlässigkeit {firma.zuverlässigkeit} · Beziehung {firma.beziehung}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Pauschale: {budgetFormatter.format(firma.verleihkostenPauschale)}
-                  </p>
-                </button>
+
+                  {hatLücke && (
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {verleiher.map((firma) => {
+                        const istAusgewählt = gewählterName === firma.name
+                        return (
+                          <button
+                            key={firma.name}
+                            type="button"
+                            onClick={() =>
+                              assignVerleiher(
+                                activeShow.act,
+                                eintrag.kategorie,
+                                istAusgewählt ? null : firma.name
+                              )
+                            }
+                            className={cn(
+                              'flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                              istAusgewählt
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                                : 'border-border'
+                            )}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="font-medium">{firma.name}</p>
+                              <Badge variant="outline">{preisniveauLabel[firma.preisniveau]}</Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              Zuverlässigkeit {firma.zuverlässigkeit} · Beziehung {firma.beziehung}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Pauschale: {budgetFormatter.format(firma.verleihkostenPauschale)}
+                            </p>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </CardContent>
