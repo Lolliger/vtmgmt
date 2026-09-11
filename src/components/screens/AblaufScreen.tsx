@@ -71,6 +71,66 @@ function ScoreBalken({ label, score }: { label: string; score: number }) {
   )
 }
 
+const CASE_FARBEN = ['bg-amber-500', 'bg-emerald-500', 'bg-rose-500']
+
+/**
+ * Dezente Aufbau/Abbau-Animation: LKW und Halle als abstrakte Formen, dazwischen
+ * wandern kleine "Cases" hin und her. Rein kosmetisch, keine Spiellogik.
+ * `richtung="hin"` = Aufbau (LKW -> Halle), `richtung="zurück"` = Abbau (Halle -> LKW).
+ */
+function TransportSzene({ richtung }: { richtung: 'hin' | 'zurück' }) {
+  const animationsKlasse = richtung === 'hin' ? 'animate-case-rechts' : 'animate-case-links'
+
+  return (
+    <div className="relative flex h-16 items-center justify-between px-2" aria-hidden="true">
+      {/* LKW */}
+      <div className="relative shrink-0">
+        <div className="h-6 w-11 rounded-sm bg-slate-400 dark:bg-slate-500" />
+        <div className="absolute -bottom-1.5 left-1.5 h-2.5 w-2.5 rounded-full bg-slate-700 dark:bg-slate-900" />
+        <div className="absolute -bottom-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-slate-700 dark:bg-slate-900" />
+      </div>
+
+      {/* Cases, die zwischen LKW und Halle hin- bzw. herwandern */}
+      <div className="relative h-4 flex-1 mx-3">
+        {CASE_FARBEN.map((farbe, i) => (
+          <div
+            key={i}
+            className={cn('absolute top-0 h-4 w-5 rounded-sm', farbe, animationsKlasse)}
+            style={{ animationDelay: `${i * 0.8}s` }}
+          />
+        ))}
+      </div>
+
+      {/* Halle */}
+      <div className="h-10 w-16 shrink-0 rounded-sm bg-muted ring-1 ring-foreground/10" />
+    </div>
+  )
+}
+
+/**
+ * Dezente Show-Animation: kleine Punkte ("Besucher") hüpfen unsynchronisiert.
+ * Anzahl richtet sich nach der erwarteten Besucherzahl der aktiven Show.
+ */
+function BesucherSzene({ erwarteteBesucherzahl }: { erwarteteBesucherzahl: number }) {
+  const anzahl = Math.min(12, Math.max(3, Math.round(erwarteteBesucherzahl / 100)))
+  const punkte = Array.from({ length: anzahl })
+
+  return (
+    <div className="flex h-16 items-end justify-center gap-2" aria-hidden="true">
+      {punkte.map((_, i) => (
+        <div
+          key={i}
+          className="h-3 w-3 rounded-full bg-primary/70 animate-besucher-huepfen"
+          style={{
+            animationDelay: `${(i % 5) * 0.15}s`,
+            animationDuration: `${0.8 + (i % 4) * 0.12}s`,
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
 function SoundcheckKarte({
   activeShow,
   techniker,
@@ -177,6 +237,12 @@ export function AblaufScreen() {
                 />
               </div>
               {flavorText && <p className="text-sm text-muted-foreground">{flavorText}</p>}
+
+              {phase === 'aufbau' && <TransportSzene richtung="hin" />}
+              {phase === 'show' && (
+                <BesucherSzene erwarteteBesucherzahl={activeShow.erwarteteBesucherzahl} />
+              )}
+              {phase === 'abbau' && <TransportSzene richtung="zurück" />}
             </>
           )}
         </CardContent>

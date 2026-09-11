@@ -78,6 +78,57 @@ export interface AuflösungsAnzeige {
   auswirkungen: string[]
 }
 
+/**
+ * Durchgehende Tag/Nacht-Uhr, die UNABHÄNGIG vom ablaufStatus einer einzelnen
+ * Show das ganze Spiel über läuft. Ein Spieltag beginnt um 9:00 Uhr und
+ * dauert 360 Echtsekunden (12 Spielstunden * SEKUNDEN_PRO_SPIELSTUNDE) bis
+ * 21:00 Uhr, gefolgt von einem kurzen Blackout, bevor der nächste Tag wieder
+ * um 9:00 Uhr beginnt. Läuft eine Show gerade im Ablauf (ablaufStatus !==
+ * null), wenn 21:00 erreicht würde, PAUSIERT der Tageswechsel, bis die Show
+ * fertig ist (siehe tickTag()).
+ */
+export interface TagesUhr {
+  /** Beginnt bei 1. */
+  tag: number
+  /** Date.now() ms, wann der aktuelle Tag um 9:00 begonnen hat. */
+  tagStartZeitpunkt: number
+  /** Date.now() ms, bis wann der Blackout dauert. null = kein Blackout aktiv. */
+  blackoutBis: number | null
+}
+
+const TAG_START_STUNDE = 9
+const TAG_ENDE_SEKUNDEN = 360
+const BLACKOUT_DAUER_MS = 3000
+
+function baueNeueTagesUhr(): TagesUhr {
+  return { tag: 1, tagStartZeitpunkt: Date.now(), blackoutBis: null }
+}
+
+/**
+ * Leitet aus tagesUhr die aktuelle Uhrzeit-of-day (9:00 + vergangene
+ * Spielstunden) ab, sowie ob gerade Blackout (Nacht/Schlafen) aktiv ist.
+ * Rein für die Anzeige - trifft keine Spiel-Entscheidungen.
+ */
+export function ermittleTagesUhrzeit(tagesUhr: TagesUhr): {
+  stunde: number
+  minute: number
+  istBlackout: boolean
+} {
+  if (tagesUhr.blackoutBis !== null) {
+    return { stunde: TAG_START_STUNDE + TAG_ENDE_SEKUNDEN / SEKUNDEN_PRO_SPIELSTUNDE, minute: 0, istBlackout: true }
+  }
+
+  const vergangeneSekundenHeute = (Date.now() - tagesUhr.tagStartZeitpunkt) / 1000
+  const stundenSeitTagStart = Math.min(
+    vergangeneSekundenHeute / SEKUNDEN_PRO_SPIELSTUNDE,
+    TAG_ENDE_SEKUNDEN / SEKUNDEN_PRO_SPIELSTUNDE
+  )
+  const gesamtMinuten = TAG_START_STUNDE * 60 + stundenSeitTagStart * 60
+  const stunde = Math.floor(gesamtMinuten / 60)
+  const minute = Math.floor(gesamtMinuten % 60)
+  return { stunde, minute, istBlackout: false }
+}
+
 export interface GameState {
   venue: Venue
   techniker: Techniker[]
@@ -95,6 +146,8 @@ export interface GameState {
   aktivesEreignis: Ereignis | null
   /** Laufzeit-Status des aktiven Show-Ablaufs (Aufbau/Show/Abbau), sonst null. Nicht persistiert. */
   ablaufStatus: AblaufStatus | null
+  /** Durchgehende Tag/Nacht-Uhr, unabhängig von ablaufStatus. Echter Spielfortschritt - wird persistiert. */
+  tagesUhr: TagesUhr
 }
 
 type GameAction =
@@ -133,6 +186,7 @@ type GameAction =
   | { type: 'EREIGNIS_AUFGETRETEN'; ereignis: Ereignis; phase: EreignisPhase }
   | { type: 'EREIGNIS_REAGIEREN'; reaktion: 'A' | 'B' }
   | { type: 'ABLAUF_ABSCHLIESSEN' }
+  | { type: 'TICK_TAG' }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -151,7 +205,18 @@ interface GespeicherterSpielstand {
   woche: number
   minusWochenInFolge: number
   zwangsentlassungAusstehend: boolean
+  tagesUhr: TagesUhr
   schemaVersion: number
+}
+
+function istGültigeTagesUhr(value: unknown): value is TagesUhr {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.tag === 'number' &&
+    typeof v.tagStartZeitpunkt === 'number' &&
+    (v.blackoutBis === null || typeof v.blackoutBis === 'number')
+  )
 }
 
 function istGespeicherterSpielstand(value: unknown): value is GespeicherterSpielstand {
@@ -183,6 +248,7 @@ export function baueNeuenSpielstand(): GameState {
     zwangsentlassungAusstehend: false,
     aktivesEreignis: null,
     ablaufStatus: null,
+    tagesUhr: baueNeueTagesUhr(),
   }
 }
 
@@ -267,6 +333,9 @@ export function ladeGespeichertenSpielstand(): GameState | null {
         typeof geparst.zwangsentlassungAusstehend === 'boolean'
           ? geparst.zwangsentlassungAusstehend
           : false,
+      // Fehlt bei Spielständen aus der Zeit vor der Tages-Uhr - kein Schema-Bruch,
+      // einfach mit einem frischen Tag starten.
+      tagesUhr: istGültigeTagesUhr(geparst.tagesUhr) ? geparst.tagesUhr : baueNeueTagesUhr(),
     }
   } catch (error) {
     console.warn('Gespeicherter Spielstand konnte nicht geladen werden:', error)
@@ -588,6 +657,35 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
     }
 
+    case 'TICK_TAG': {
+      const { tagesUhr } = state
+
+      if (tagesUhr.blackoutBis !== null) {
+        // Blackout läuft - erst beenden (neuer Tag beginnt), wenn die Dauer um ist.
+        if (Date.now() >= tagesUhr.blackoutBis) {
+          return {
+            ...state,
+            tagesUhr: { tag: tagesUhr.tag + 1, tagStartZeitpunkt: Date.now(), blackoutBis: null },
+          }
+        }
+        return state
+      }
+
+      const vergangeneSekundenHeute = (Date.now() - tagesUhr.tagStartZeitpunkt) / 1000
+      if (vergangeneSekundenHeute >= TAG_ENDE_SEKUNDEN) {
+        // 21:00 erreicht - Blackout nur starten, wenn gerade keine Show im Ablauf ist.
+        // Läuft eine Show noch, wird hier einfach nichts getan und beim nächsten Tick
+        // erneut geprüft, bis die Show fertig ist (kein Tageswechsel mitten in der Show).
+        if (state.ablaufStatus === null) {
+          return {
+            ...state,
+            tagesUhr: { ...tagesUhr, blackoutBis: Date.now() + BLACKOUT_DAUER_MS },
+          }
+        }
+      }
+      return state
+    }
+
     case 'ABLAUF_ABSCHLIESSEN': {
       if (!state.ablaufStatus) return state
       const neuerState = führeShowAuflösungDurch(
@@ -732,6 +830,10 @@ export function GameProvider({
         })
       },
       tickAblauf: () => {
+        // Tages-Uhr läuft unabhängig vom Show-Ablauf immer mit - deshalb VOR dem
+        // early return unten, das nur die show-bezogene Ablauf-Logik betrifft.
+        dispatch({ type: 'TICK_TAG' })
+
         const status = state.ablaufStatus
         if (!status || status.pausiertSeit !== null) return
 
@@ -813,6 +915,7 @@ export function GameProvider({
             woche: state.woche,
             minusWochenInFolge: state.minusWochenInFolge,
             zwangsentlassungAusstehend: state.zwangsentlassungAusstehend,
+            tagesUhr: state.tagesUhr,
             schemaVersion: SPIELSTAND_SCHEMA_VERSION,
           }
           localStorage.setItem(SPIELSTAND_KEY, JSON.stringify(spielstand))

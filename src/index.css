@@ -137,3 +137,63 @@ body {
     @apply font-sans;
   }
 }
+
+/*
+ * Low-Profile-Animationen für den AblaufScreen (Aufbau/Show/Abbau). Rein
+ * kosmetisch, ohne Einfluss auf Spiellogik.
+ */
+@keyframes case-nach-rechts {
+  0% {
+    left: 0%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    left: calc(100% - 1.25rem);
+    opacity: 0;
+  }
+}
+
+@keyframes case-nach-links {
+  0% {
+    left: calc(100% - 1.25rem);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    left: 0%;
+    opacity: 0;
+  }
+}
+
+@keyframes besucher-huepfen {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-case-rechts {
+  animation: case-nach-rechts 2.4s ease-in-out infinite backwards;
+}
+
+.animate-case-links {
+  animation: case-nach-links 2.4s ease-in-out infinite backwards;
+}
+
+.animate-besucher-huepfen {
+  animation: besucher-huepfen 1s ease-in-out infinite;
+}
