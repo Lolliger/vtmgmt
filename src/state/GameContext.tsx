@@ -3,6 +3,7 @@ import { anfragen, techniker, venue, verleiher } from '@/data/dummyData'
 import {
   berechneAuflösung,
   berechneAuswirkungen,
+  geschätzteShowStunden,
   type AuflösungsErgebnis,
 } from '@/logic/showAuflösung'
 import type {
@@ -13,6 +14,8 @@ import type {
   Venue,
   Verleiher,
 } from '@/types'
+
+export { geschätzteShowStunden }
 
 export type View = 'dashboard' | 'staffing' | 'auflösung'
 
@@ -43,6 +46,7 @@ type GameAction =
       name: string | null
     }
   | { type: 'RESOLVE_SHOW'; act: string }
+  | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
 
 const initialState: GameState = {
@@ -110,6 +114,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         })),
       }
 
+    case 'TOGGLE_ÜBERSTUNDEN':
+      return {
+        ...state,
+        shows: updateShow(state.shows, action.act, (show) => ({
+          ...show,
+          überstundenProRolle: {
+            ...show.überstundenProRolle,
+            [action.rolle]: action.aktiv,
+          },
+        })),
+      }
+
     case 'RESOLVE_SHOW': {
       const show = state.shows.find((s) => s.act === action.act)
       if (!show) return state
@@ -156,6 +172,7 @@ interface GameContextValue extends GameState {
   openStaffing: (act: string) => void
   assignTechniker: (act: string, rolle: TechnikerRolle, name: string | null) => void
   assignVerleiher: (act: string, kategorie: EquipmentKategorie, name: string | null) => void
+  toggleÜberstunden: (act: string, rolle: TechnikerRolle, aktiv: boolean) => void
   resolveShow: (act: string) => void
   backToDashboard: () => void
   activeShow: Anfrage | null
@@ -178,6 +195,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'ASSIGN_TECHNIKER', act, rolle, name }),
       assignVerleiher: (act, kategorie, name) =>
         dispatch({ type: 'ASSIGN_VERLEIHER', act, kategorie, name }),
+      toggleÜberstunden: (act, rolle, aktiv) =>
+        dispatch({ type: 'TOGGLE_ÜBERSTUNDEN', act, rolle, aktiv }),
       resolveShow: (act) => dispatch({ type: 'RESOLVE_SHOW', act }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
     }

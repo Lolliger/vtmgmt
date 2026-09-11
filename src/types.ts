@@ -22,6 +22,12 @@ export interface Techniker {
   stufe: TechnikerStufe
   erfahrung: number
   verfügbar: boolean
+  /** Wöchentliche Stunden-Kapazität. */
+  wochenstunden: number
+  /** Bereits verplante Stunden diese Woche, unabhängig von der aktuell betrachteten Show. */
+  verplanteStunden: number
+  /** Moral/Zustand, Skala 0-100. */
+  moral: number
 }
 
 export type Preisniveau = 'günstig' | 'mittel' | 'premium'
@@ -50,4 +56,6 @@ export interface Anfrage {
   zugewieseneTechniker: Record<TechnikerRolle, string | null>
   gewählteVerleiherProKategorie: Partial<Record<EquipmentKategorie, string | null>>
   ergebnis: Ergebnis | null
+  /** Hält fest, für welche zugewiesene Rolle der Techniker in Überstunden arbeitet. */
+  überstundenProRolle: Partial<Record<TechnikerRolle, boolean>>
 }

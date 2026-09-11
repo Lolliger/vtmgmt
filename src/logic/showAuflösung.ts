@@ -32,6 +32,15 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
+/**
+ * Schätzt die Gesamtdauer einer Show in Stunden (Aufbau + Show + Abbau).
+ * Basis: 9h (4h Aufbau + 3h Show + 2h Abbau), +1h je angefangene 500
+ * Besucher über 500.
+ */
+export function geschätzteShowStunden(anfrage: Anfrage): number {
+  return 9 + Math.ceil(Math.max(0, anfrage.erwarteteBesucherzahl - 500) / 500)
+}
+
 /** Liefert die für ein Genre benötigten Rollen samt Anforderung. */
 export function benötigteRollen(
   genre: Genre
@@ -288,18 +297,46 @@ export function berechneAuswirkungen(
       `Budget -${formatCurrency(firma.verleihkostenPauschale)} (Verleih ${firma.name})`
     )
   }
-  const neuesBudget = venue.budget + budgetDelta
-
   const erfahrungDelta =
     ergebnis.kategorie === 'gut' ? 8 : ergebnis.kategorie === 'mittel' ? 4 : 2
   const eingesetzteNamen = new Set(
     Object.values(anfrage.zugewieseneTechniker).filter((n): n is string => !!n)
   )
+
+  // Überstunden: pro Rolle mit aktiviertem Überstunden-Flag und zugewiesenem
+  // Techniker zusätzlich Budget-Zuschlag und Moralverlust. Beeinflusst NICHT
+  // den staffingScore/die Ergebnis-Kategorie dieser Show.
+  const ÜBERSTUNDEN_BUDGET_ZUSCHLAG = 150
+  const ÜBERSTUNDEN_MORAL_VERLUST = 15
+  const namenInÜberstunden = new Set(
+    (Object.entries(anfrage.überstundenProRolle) as [TechnikerRolle, boolean | undefined][])
+      .filter(([rolle, aktiv]) => aktiv && anfrage.zugewieseneTechniker[rolle])
+      .map(([rolle]) => anfrage.zugewieseneTechniker[rolle] as string)
+  )
+
+  for (const name of namenInÜberstunden) {
+    budgetDelta -= ÜBERSTUNDEN_BUDGET_ZUSCHLAG
+    auswirkungen.push(`Budget -${formatCurrency(ÜBERSTUNDEN_BUDGET_ZUSCHLAG)} (Überstunden ${name})`)
+  }
+  const neuesBudgetMitÜberstunden = venue.budget + budgetDelta
+
   const neueTechniker = techniker.map((t) => {
-    if (!eingesetzteNamen.has(t.name)) return t
-    const neu = clamp(t.erfahrung + erfahrungDelta, 0, 100)
-    auswirkungen.push(`${t.name}: Erfahrung +${erfahrungDelta}`)
-    return { ...t, erfahrung: neu }
+    const eingesetzt = eingesetzteNamen.has(t.name)
+    const inÜberstunden = namenInÜberstunden.has(t.name)
+    if (!eingesetzt && !inÜberstunden) return t
+
+    let neu = t
+    if (eingesetzt) {
+      const neueErfahrung = clamp(t.erfahrung + erfahrungDelta, 0, 100)
+      auswirkungen.push(`${t.name}: Erfahrung +${erfahrungDelta}`)
+      neu = { ...neu, erfahrung: neueErfahrung }
+    }
+    if (inÜberstunden) {
+      const neueMoral = clamp(t.moral - ÜBERSTUNDEN_MORAL_VERLUST, 0, 100)
+      auswirkungen.push(`${t.name}: Moral -${ÜBERSTUNDEN_MORAL_VERLUST}`)
+      neu = { ...neu, moral: neueMoral }
+    }
+    return neu
   })
 
   let neueVerleiher = verleiher
@@ -319,7 +356,7 @@ export function berechneAuswirkungen(
   }
 
   return {
-    venue: { ...venue, reputation: neueReputation, budget: neuesBudget },
+    venue: { ...venue, reputation: neueReputation, budget: neuesBudgetMitÜberstunden },
     techniker: neueTechniker,
     verleiher: neueVerleiher,
     auswirkungen,

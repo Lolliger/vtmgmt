@@ -11,7 +11,11 @@ import {
 import { cn } from '@/lib/utils'
 import { budgetFormatter, dateFormatter } from '@/lib/format'
 import type { Schwierigkeit } from '@/data/genreAnforderungen'
-import { benötigteRollen, ermittleAlleEquipmentBedarfe } from '@/logic/showAuflösung'
+import {
+  benötigteRollen,
+  ermittleAlleEquipmentBedarfe,
+  geschätzteShowStunden,
+} from '@/logic/showAuflösung'
 import { useGame } from '@/state/GameContext'
 import type { Preisniveau } from '@/types'
 
@@ -35,6 +39,7 @@ export function StaffingScreen() {
     verleiher,
     assignTechniker,
     assignVerleiher,
+    toggleÜberstunden,
     resolveShow,
     backToDashboard,
   } = useGame()
@@ -51,6 +56,7 @@ export function StaffingScreen() {
   }
 
   const rollen = benötigteRollen(activeShow.genre)
+  const benötigteStunden = geschätzteShowStunden(activeShow)
 
   const equipmentBedarfe = ermittleAlleEquipmentBedarfe(activeShow.genre, venue.equipmentBestand)
 
@@ -104,15 +110,27 @@ export function StaffingScreen() {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {kandidaten.map((person) => {
                   const istAusgewählt = zugewiesen === person.name
+                  const freieStunden = person.wochenstunden - person.verplanteStunden
+                  const brauchtÜberstunden = freieStunden < benötigteStunden
+                  const überstundenAktiv = activeShow.überstundenProRolle[rolle] === true
+
+                  const handleAuswahl = () =>
+                    assignTechniker(activeShow.act, rolle, istAusgewählt ? null : person.name)
+
                   return (
-                    <button
+                    <div
                       key={person.name}
-                      type="button"
-                      onClick={() =>
-                        assignTechniker(activeShow.act, rolle, istAusgewählt ? null : person.name)
-                      }
+                      role="button"
+                      tabIndex={0}
+                      onClick={handleAuswahl}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleAuswahl()
+                        }
+                      }}
                       className={cn(
-                        'flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                        'flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
                         istAusgewählt
                           ? 'border-primary bg-primary/5 ring-1 ring-primary'
                           : 'border-border'
@@ -120,12 +138,51 @@ export function StaffingScreen() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium">{person.name}</p>
-                        <Badge variant="outline">verfügbar</Badge>
+                        <div className="flex items-center gap-1">
+                          {brauchtÜberstunden && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                            >
+                              Überstunden nötig
+                            </Badge>
+                          )}
+                          <Badge variant="outline">verfügbar</Badge>
+                        </div>
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {person.stufe} · Erfahrung {person.erfahrung}
                       </p>
-                    </button>
+                      <p
+                        className={cn(
+                          'text-xs',
+                          freieStunden < 0
+                            ? 'font-medium text-red-600 dark:text-red-400'
+                            : brauchtÜberstunden
+                              ? 'font-medium text-amber-700 dark:text-amber-400'
+                              : 'text-muted-foreground'
+                        )}
+                      >
+                        {freieStunden}h frei / {benötigteStunden}h benötigt
+                      </p>
+
+                      {istAusgewählt && brauchtÜberstunden && (
+                        <label
+                          className="mt-1 flex items-center gap-2 text-xs"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={überstundenAktiv}
+                            onChange={(e) =>
+                              toggleÜberstunden(activeShow.act, rolle, e.target.checked)
+                            }
+                            className="h-3.5 w-3.5 rounded border-border accent-primary"
+                          />
+                          Überstunden einsetzen
+                        </label>
+                      )}
+                    </div>
                   )
                 })}
               </div>
