@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { AblaufWidget } from '@/components/AblaufWidget'
+import { SoundcheckDialog } from '@/components/SoundcheckDialog'
 import { UhrAnzeige } from '@/components/UhrAnzeige'
-import { AblaufScreen } from '@/components/screens/AblaufScreen'
 import { AuflösungScreen } from '@/components/screens/AuflösungScreen'
 import { Dashboard } from '@/components/screens/Dashboard'
 import { EreignisScreen } from '@/components/screens/EreignisScreen'
@@ -35,11 +36,12 @@ function Screens() {
   return (
     <div className="min-h-svh bg-muted/30 px-4 py-8 sm:px-8">
       <UhrAnzeige />
+      <AblaufWidget />
       {view === 'dashboard' && <Dashboard />}
       {view === 'staffing' && <StaffingScreen />}
-      {view === 'ablauf' && <AblaufScreen />}
       {view === 'auflösung' && <AuflösungScreen />}
-      {view === 'ereignis' && <EreignisScreen />}
+      <SoundcheckDialog />
+      <EreignisScreen />
     </div>
   )
 }

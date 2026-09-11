@@ -1,31 +1,22 @@
-import { ermittlePhase, formatSpielUhrzeit, PHASE_LABEL } from '@/lib/ablaufAnzeige'
-import { useTick } from '@/hooks/useTick'
-import { useVergangeneSekunden } from '@/hooks/useVergangeneSekunden'
+import { useAktuelleMinute } from '@/hooks/useAktuelleMinute'
 import { cn } from '@/lib/utils'
-import { ermittleTagesUhrzeit, SEKUNDEN_PRO_SPIELSTUNDE, useGame } from '@/state/GameContext'
+import { ermittleTagesUhrzeit, useGame } from '@/state/GameContext'
 
 /**
- * Immer sichtbare Tages-/Uhrzeit-Anzeige (fixed oben rechts). Zeigt Tag +
- * Uhrzeit der durchgehenden Tagesuhr, unabhängig davon, ob gerade eine Show
- * im Ablauf ist. Läuft ein Ablauf (ablaufStatus !== null), wird zusätzlich
- * die bestehende Phasen-Info (Aufbau/Soundcheck/Show/Abbau) angezeigt.
- * Während eines Blackouts (Tageswechsel) erscheint stattdessen ein kurzer,
- * gedämpfter Nacht-Hinweis.
+ * Die EINE immer sichtbare Tages-/Uhrzeit-Anzeige (fixed oben rechts). Zeigt
+ * ausschließlich Tag + aktuelle Tageszeit der durchgehenden Tagesuhr, plus
+ * einen gedämpften Nacht-Hinweis während eines Blackouts (Tageswechsel).
+ * Keine Ablauf-/Phasen-Info mehr hier - die zeigt bei laufendem Ablauf das
+ * separate `AblaufWidget` oben links.
  */
 export function UhrAnzeige() {
-  const { ablaufStatus, tagesUhr } = useGame()
+  const { tagesUhr } = useGame()
   // Erzwingt jede Sekunde ein Re-Render, damit die von Date.now() abgeleitete
   // Tagesuhrzeit auch ohne laufenden Ablauf sichtbar weiterläuft.
-  useTick()
-  const vergangeneSekunden = useVergangeneSekunden(ablaufStatus)
+  useAktuelleMinute()
 
   const { stunde, minute, istBlackout } = ermittleTagesUhrzeit(tagesUhr)
   const tagesUhrzeitText = `${String(stunde).padStart(2, '0')}:${String(minute).padStart(2, '0')} Uhr`
-
-  const phase = ablaufStatus ? ermittlePhase(ablaufStatus, vergangeneSekunden) : null
-  const ablaufUhrzeit = ablaufStatus
-    ? formatSpielUhrzeit(vergangeneSekunden, SEKUNDEN_PRO_SPIELSTUNDE)
-    : null
 
   return (
     <div
@@ -49,15 +40,6 @@ export function UhrAnzeige() {
             {tagesUhrzeitText}
           </span>
         </>
-      )}
-
-      {phase && ablaufUhrzeit && !istBlackout && (
-        <div className="mt-1 flex flex-col items-end gap-0.5 border-t border-foreground/10 pt-1">
-          <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-            {PHASE_LABEL[phase]}
-          </span>
-          <span className="text-sm leading-none font-semibold tabular-nums">{ablaufUhrzeit}</span>
-        </div>
       )}
     </div>
   )

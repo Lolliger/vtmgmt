@@ -10,7 +10,6 @@ import {
   berechneAuflösung,
   berechneAuswirkungen,
   geschätzteShowStunden,
-  phasenStunden,
   type AuflösungsErgebnis,
 } from '@/logic/showAuflösung'
 import type {
@@ -22,15 +21,32 @@ import type {
   Verleiher,
 } from '@/types'
 
-export { geschätzteShowStunden, phasenStunden }
+export { geschätzteShowStunden }
 
-export type View = 'dashboard' | 'staffing' | 'ablauf' | 'ereignis' | 'auflösung'
+export type View = 'dashboard' | 'staffing' | 'auflösung'
 
 const GUT_SCHWELLE = 80
 const MITTEL_SCHWELLE = 50
 
-/** Tempo der simulierten Show-Uhr: 1 Spielminute = 0,5 Echtsekunden. */
+/** Tempo der simulierten Spieluhr: 1 Spielstunde = 30 Echtsekunden. */
 export const SEKUNDEN_PRO_SPIELSTUNDE = 30
+/** Äquivalent in Spielminuten: 1 Spielminute = 0,5 Echtsekunden. */
+export const SEKUNDEN_PRO_SPIELMINUTE = SEKUNDEN_PRO_SPIELSTUNDE / 60
+
+/** Tagesbeginn 9:00 Uhr, als Minuten seit Mitternacht. */
+export const TAGESBEGINN_MINUTE = 9 * 60
+/** Tagesende 21:30 Uhr, als Minuten seit Mitternacht. */
+export const TAGESENDE_MINUTE = 21 * 60 + 30
+
+/** Fester Ablauf-Zeitplan (Minuten seit Mitternacht bzw. Dauer in Minuten). */
+/** Exportiert, da die Anzeige (AblaufWidget) daraus den Aufbau-Fortschritt berechnet. */
+export const AUFBAU_DAUER_MINUTEN = 120
+const SOUNDCHECK_FIXE_MINUTE = 18 * 60 + 30
+const SHOW_START_FIXE_MINUTE = 19 * 60
+const SHOW_DAUER_MINUTEN = 90
+const ABBAU_DAUER_MINUTEN = 60
+
+const BLACKOUT_DAUER_MS = 3000
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -49,22 +65,26 @@ export interface GesammeltesEreignis {
 
 /**
  * Laufzeit-Status eines aktiven Show-Ablaufs (Aufbau → Soundcheck-Gate → Show →
- * Abbau → Auflösung). Wird NICHT persistiert (wie aktivesEreignis) - beim Laden/
- * Neustart immer null. Die Uhr läuft rein zeitbasiert (Date.now()), unabhängig
- * von der aktuell angezeigten View.
+ * Abbau → Auflösung). Wird NICHT persistiert - beim Laden/Neustart immer null.
+ * Nutzt KEINE eigene Zeitbasis mehr, sondern feste Minuten-Marken (Minuten seit
+ * Mitternacht), die gegen die gemeinsame tagesUhr geprüft werden (siehe
+ * ermittleAktuelleMinute). Pausenzustand (Soundcheck/Ereignis) lebt zentral in
+ * tagesUhr.pausiertSeit - hier steht nur noch der Grund.
  */
 export interface AblaufStatus {
   act: string
-  /** Date.now() ms bei Start; wird bei Pausen um die Pausendauer nach vorne verschoben. */
-  startZeitpunkt: number
-  /** Date.now() ms, seit dem pausiert ist (Reaktion/Soundcheck aussteht), sonst null. */
-  pausiertSeit: number | null
+  /** Ende des (festen, 2h) Aufbaus. */
+  aufbauEndeMinute: number
+  /** Fixe Soundcheck-Zeit (18:30), sofern der Aufbau nicht später endet. */
+  soundcheckMinute: number
+  /** Fixer Show-Start (19:00), sofern der Soundcheck nicht später liegt. */
+  showStartMinute: number
+  /** Show-Ende (Start + 1,5h fest). */
+  showEndeMinute: number
+  /** Abbau-Ende (Show-Ende + 1h fest). */
+  abbauEndeMinute: number
   pausierGrund: 'soundcheck' | 'ereignis' | null
-  /** Kumulierte Sekunden seit Start, an denen die jeweilige Phase endet. */
-  aufbauEndeSekunde: number
-  showEndeSekunde: number
-  abbauEndeSekunde: number
-  /** Zufälliger Zeitpunkt (Sekunden seit Start) für den Ereignis-Check je Phase. */
+  /** Zufälliger Zeitpunkt (Minute seit Mitternacht) für den Ereignis-Check je Phase. */
   ereignisZeitpunkte: { aufbau: number; show: number; abbau: number }
   ereignisGeprüft: { aufbau: boolean; show: boolean; abbau: boolean }
   soundcheckBestätigt: boolean
@@ -79,35 +99,49 @@ export interface AuflösungsAnzeige {
 }
 
 /**
- * Durchgehende Tag/Nacht-Uhr, die UNABHÄNGIG vom ablaufStatus einer einzelnen
- * Show das ganze Spiel über läuft. Ein Spieltag beginnt um 9:00 Uhr und
- * dauert 360 Echtsekunden (12 Spielstunden * SEKUNDEN_PRO_SPIELSTUNDE) bis
- * 21:00 Uhr, gefolgt von einem kurzen Blackout, bevor der nächste Tag wieder
- * um 9:00 Uhr beginnt. Läuft eine Show gerade im Ablauf (ablaufStatus !==
- * null), wenn 21:00 erreicht würde, PAUSIERT der Tageswechsel, bis die Show
- * fertig ist (siehe tickTag()).
+ * Durchgehende Tag/Nacht-Uhr - die EINZIGE Zeitquelle im Spiel. Ein Spieltag
+ * beginnt um 9:00 Uhr (TAGESBEGINN_MINUTE) und dauert bis 21:30 Uhr
+ * (TAGESENDE_MINUTE), gefolgt von einem kurzen Blackout, bevor der nächste Tag
+ * wieder um 9:00 Uhr beginnt. Läuft eine Show gerade im Ablauf (ablaufStatus
+ * !== null), wenn 21:30 erreicht würde, PAUSIERT der Tageswechsel, bis die Show
+ * fertig ist (siehe tickAblauf()). pausiertSeit friert die Uhr während eines
+ * Soundcheck- oder Ereignis-Gates ein (ersetzt das frühere pausiertSeit auf
+ * AblaufStatus).
  */
 export interface TagesUhr {
   /** Beginnt bei 1. */
   tag: number
   /** Date.now() ms, wann der aktuelle Tag um 9:00 begonnen hat. */
   tagStartZeitpunkt: number
+  /** Date.now() ms, seit dem die Uhr pausiert ist (Soundcheck/Ereignis aussteht), sonst null. */
+  pausiertSeit: number | null
   /** Date.now() ms, bis wann der Blackout dauert. null = kein Blackout aktiv. */
   blackoutBis: number | null
 }
 
-const TAG_START_STUNDE = 9
-const TAG_ENDE_SEKUNDEN = 360
-const BLACKOUT_DAUER_MS = 3000
-
 function baueNeueTagesUhr(): TagesUhr {
-  return { tag: 1, tagStartZeitpunkt: Date.now(), blackoutBis: null }
+  return { tag: 1, tagStartZeitpunkt: Date.now(), pausiertSeit: null, blackoutBis: null }
 }
 
 /**
- * Leitet aus tagesUhr die aktuelle Uhrzeit-of-day (9:00 + vergangene
- * Spielstunden) ab, sowie ob gerade Blackout (Nacht/Schlafen) aktiv ist.
- * Rein für die Anzeige - trifft keine Spiel-Entscheidungen.
+ * Leitet aus tagesUhr die aktuelle Spielzeit als Minute seit Mitternacht ab.
+ * Ist die Uhr pausiert (pausiertSeit !== null), wird der eingefrorene Zeitpunkt
+ * statt Date.now() verwendet - die Minute bleibt dann konstant, bis die Pause
+ * aufgelöst wird (siehe SOUNDCHECK_BESTÄTIGEN/EREIGNIS_REAGIEREN/SOUNDCHECK_ABBRECHEN).
+ * Einzige Stelle im Code, die Echtzeit in Spielzeit umrechnet.
+ */
+export function ermittleAktuelleMinute(tagesUhr: TagesUhr): number {
+  const referenzZeitpunkt = tagesUhr.pausiertSeit ?? Date.now()
+  const vergangeneSekunden = (referenzZeitpunkt - tagesUhr.tagStartZeitpunkt) / 1000
+  return TAGESBEGINN_MINUTE + vergangeneSekunden / SEKUNDEN_PRO_SPIELMINUTE
+}
+
+/**
+ * Leitet aus tagesUhr die aktuelle Uhrzeit-of-day (Stunde/Minute) ab, sowie ob
+ * gerade Blackout (Nacht/Schlafen) aktiv ist. Rein für die Anzeige - trifft
+ * keine Spiel-Entscheidungen. Wird auf [TAGESBEGINN_MINUTE, TAGESENDE_MINUTE]
+ * geclampt, damit die Anzeige bei einem über 21:30 hinaus laufenden Ablauf
+ * nicht "überläuft".
  */
 export function ermittleTagesUhrzeit(tagesUhr: TagesUhr): {
   stunde: number
@@ -115,18 +149,24 @@ export function ermittleTagesUhrzeit(tagesUhr: TagesUhr): {
   istBlackout: boolean
 } {
   if (tagesUhr.blackoutBis !== null) {
-    return { stunde: TAG_START_STUNDE + TAG_ENDE_SEKUNDEN / SEKUNDEN_PRO_SPIELSTUNDE, minute: 0, istBlackout: true }
+    return {
+      stunde: Math.floor(TAGESENDE_MINUTE / 60),
+      minute: TAGESENDE_MINUTE % 60,
+      istBlackout: true,
+    }
   }
 
-  const vergangeneSekundenHeute = (Date.now() - tagesUhr.tagStartZeitpunkt) / 1000
-  const stundenSeitTagStart = Math.min(
-    vergangeneSekundenHeute / SEKUNDEN_PRO_SPIELSTUNDE,
-    TAG_ENDE_SEKUNDEN / SEKUNDEN_PRO_SPIELSTUNDE
-  )
-  const gesamtMinuten = TAG_START_STUNDE * 60 + stundenSeitTagStart * 60
-  const stunde = Math.floor(gesamtMinuten / 60)
-  const minute = Math.floor(gesamtMinuten % 60)
-  return { stunde, minute, istBlackout: false }
+  const minutenImTag = clamp(ermittleAktuelleMinute(tagesUhr), TAGESBEGINN_MINUTE, TAGESENDE_MINUTE)
+  return {
+    stunde: Math.floor(minutenImTag / 60),
+    minute: Math.floor(minutenImTag % 60),
+    istBlackout: false,
+  }
+}
+
+/** Leitet die Wochenzahl (beginnt bei 1) rein aus dem aktuellen Tag ab. Tag 1-7 = Woche 1, Tag 8-14 = Woche 2, usw. */
+export function ermittleWoche(tag: number): number {
+  return Math.floor((tag - 1) / 7) + 1
 }
 
 export interface GameState {
@@ -134,7 +174,6 @@ export interface GameState {
   techniker: Techniker[]
   verleiher: Verleiher[]
   shows: Anfrage[]
-  woche: number
   view: View
   activeShowAct: string | null
   letzteAuflösung: AuflösungsAnzeige | null
@@ -142,11 +181,11 @@ export interface GameState {
   minusWochenInFolge: number
   /** true, wenn der Spieler eine Zwangsentlassung durchführen muss (siehe ENTLASSEN). */
   zwangsentlassungAusstehend: boolean
-  /** Aktuell zur Reaktion anstehendes Zufallsereignis (view === 'ereignis'), sonst null. */
+  /** Aktuell zur Reaktion anstehendes Zufallsereignis, sonst null. */
   aktivesEreignis: Ereignis | null
   /** Laufzeit-Status des aktiven Show-Ablaufs (Aufbau/Show/Abbau), sonst null. Nicht persistiert. */
   ablaufStatus: AblaufStatus | null
-  /** Durchgehende Tag/Nacht-Uhr, unabhängig von ablaufStatus. Echter Spielfortschritt - wird persistiert. */
+  /** Die EINE Zeitquelle des Spiels - wird persistiert. */
   tagesUhr: TagesUhr
 }
 
@@ -163,30 +202,21 @@ type GameAction =
     }
   | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
-  | { type: 'WOCHE_ABSCHLIESSEN' }
   | { type: 'ENTLASSEN'; name: string }
   | {
       type: 'ABLAUF_STARTEN'
       act: string
-      aufbauEndeSekunde: number
-      showEndeSekunde: number
-      abbauEndeSekunde: number
+      aufbauEndeMinute: number
+      soundcheckMinute: number
+      showStartMinute: number
+      showEndeMinute: number
+      abbauEndeMinute: number
       ereignisZeitpunkte: { aufbau: number; show: number; abbau: number }
     }
-  | { type: 'SOUNDCHECK_ERREICHT' }
   | { type: 'SOUNDCHECK_BESTÄTIGEN' }
   | { type: 'SOUNDCHECK_ABBRECHEN' }
-  | { type: 'EREIGNIS_GEPRÜFT'; phase: EreignisPhase }
-  | {
-      type: 'EREIGNIS_AUTOMATISCH_ANGEWENDET'
-      phase: EreignisPhase
-      beschreibung: string
-      effekt: EreignisEffekt
-    }
-  | { type: 'EREIGNIS_AUFGETRETEN'; ereignis: Ereignis; phase: EreignisPhase }
   | { type: 'EREIGNIS_REAGIEREN'; reaktion: 'A' | 'B' }
-  | { type: 'ABLAUF_ABSCHLIESSEN' }
-  | { type: 'TICK_TAG' }
+  | { type: 'TICK' }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -202,7 +232,6 @@ interface GespeicherterSpielstand {
   techniker: Techniker[]
   verleiher: Verleiher[]
   shows: Anfrage[]
-  woche: number
   minusWochenInFolge: number
   zwangsentlassungAusstehend: boolean
   tagesUhr: TagesUhr
@@ -215,8 +244,28 @@ function istGültigeTagesUhr(value: unknown): value is TagesUhr {
   return (
     typeof v.tag === 'number' &&
     typeof v.tagStartZeitpunkt === 'number' &&
-    (v.blackoutBis === null || typeof v.blackoutBis === 'number')
+    (v.blackoutBis === null || typeof v.blackoutBis === 'number') &&
+    (v.pausiertSeit === undefined || v.pausiertSeit === null || typeof v.pausiertSeit === 'number')
   )
+}
+
+/**
+ * Normalisiert eine geladene tagesUhr: pausiertSeit fehlt bei älteren
+ * Spielständen (kein Schema-Bruch, einfach als "nicht pausiert" annehmen).
+ * War die Uhr beim Speichern mitten in einer Pause (Soundcheck/Ereignis),
+ * kann diese nach dem Laden nicht fortgesetzt werden, da ablaufStatus nicht
+ * persistiert wird - die Zeit wird stattdessen einfach fortgesetzt, statt für
+ * immer eingefroren zu bleiben.
+ */
+function normalisiereGeladeneTagesUhr(tagesUhr: TagesUhr): TagesUhr {
+  if (tagesUhr.pausiertSeit === null || tagesUhr.pausiertSeit === undefined) {
+    return { ...tagesUhr, pausiertSeit: null }
+  }
+  return {
+    ...tagesUhr,
+    tagStartZeitpunkt: tagesUhr.tagStartZeitpunkt + (Date.now() - tagesUhr.pausiertSeit),
+    pausiertSeit: null,
+  }
 }
 
 function istGespeicherterSpielstand(value: unknown): value is GespeicherterSpielstand {
@@ -226,8 +275,7 @@ function istGespeicherterSpielstand(value: unknown): value is GespeicherterSpiel
     v.venue !== undefined &&
     Array.isArray(v.techniker) &&
     Array.isArray(v.verleiher) &&
-    Array.isArray(v.shows) &&
-    typeof v.woche === 'number'
+    Array.isArray(v.shows)
   )
 }
 
@@ -240,7 +288,6 @@ export function baueNeuenSpielstand(): GameState {
     techniker,
     verleiher,
     shows: anfragen,
-    woche: 1,
     view: 'dashboard',
     activeShowAct: null,
     letzteAuflösung: null,
@@ -293,7 +340,9 @@ export function pruefeSpielstandKompatibilitaet(): 'kompatibel' | 'inkompatibel'
 /**
  * Lädt den gespeicherten Spielstand aus localStorage. Navigations-State
  * (view/activeShowAct/letzteAuflösung) wird bewusst NICHT wiederhergestellt,
- * sondern immer frisch gesetzt.
+ * sondern immer frisch gesetzt. Das frühere eigenständige `woche`-Feld wird,
+ * falls im alten Spielstand vorhanden, stillschweigend ignoriert (woche wird
+ * jetzt immer aus tagesUhr.tag abgeleitet, siehe ermittleWoche()).
  * Gibt bei fehlendem Eintrag, inkompatiblem Schema, Parse-Fehler oder
  * fehlenden Feldern null zurück.
  */
@@ -320,7 +369,6 @@ export function ladeGespeichertenSpielstand(): GameState | null {
       techniker: geparst.techniker,
       verleiher: geparst.verleiher,
       shows: geparst.shows,
-      woche: geparst.woche,
       view: 'dashboard',
       activeShowAct: null,
       letzteAuflösung: null,
@@ -335,7 +383,9 @@ export function ladeGespeichertenSpielstand(): GameState | null {
           : false,
       // Fehlt bei Spielständen aus der Zeit vor der Tages-Uhr - kein Schema-Bruch,
       // einfach mit einem frischen Tag starten.
-      tagesUhr: istGültigeTagesUhr(geparst.tagesUhr) ? geparst.tagesUhr : baueNeueTagesUhr(),
+      tagesUhr: istGültigeTagesUhr(geparst.tagesUhr)
+        ? normalisiereGeladeneTagesUhr(geparst.tagesUhr)
+        : baueNeueTagesUhr(),
     }
   } catch (error) {
     console.warn('Gespeicherter Spielstand konnte nicht geladen werden:', error)
@@ -365,9 +415,9 @@ function updateShow(
 /**
  * Führt die eigentliche Show-Auflösung durch (Berechnung + Auswirkungen) und
  * verrechnet die Effekte aller während des Ablaufs (Aufbau/Show/Abbau)
- * aufgetretenen Zufallsereignisse. Wird von ABLAUF_ABSCHLIESSEN aufgerufen,
- * nachdem alle drei Phasen durchlaufen wurden. Ohne Ereignisse (leeres Array,
- * Default) ist das Ergebnis identisch zur reinen Basis-Auflösung.
+ * aufgetretenen Zufallsereignisse. Wird aufgerufen, nachdem alle drei Phasen
+ * durchlaufen wurden (siehe TICK). Ohne Ereignisse (leeres Array, Default) ist
+ * das Ergebnis identisch zur reinen Basis-Auflösung.
  */
 function führeShowAuflösungDurch(
   state: GameState,
@@ -450,6 +500,38 @@ function führeShowAuflösungDurch(
     view: 'auflösung',
     letzteAuflösung: { ergebnis, auswirkungen },
     aktivesEreignis: null,
+  }
+}
+
+/**
+ * Wendet den Wochenabschluss an (Gehaltsabzug, Wochenstunden-Reset,
+ * Minus-Wochen-Zähler, Reputationsverlust/Zwangsentlassungs-Flag bei
+ * anhaltend negativem Budget). Wird NICHT mehr manuell per Button ausgelöst,
+ * sondern automatisch beim Blackout-Ende, sobald der neue Tag einen neuen
+ * 7-Tage-Block beginnt (siehe TICK, Tag 8/15/22/...).
+ */
+function wendeWochenabschlussAn(state: GameState): GameState {
+  const gehaltssumme = state.techniker.reduce((summe, t) => summe + t.gehalt, 0)
+  const neuesBudget = state.venue.budget - gehaltssumme
+
+  const minusWochenInFolge = neuesBudget < 0 ? state.minusWochenInFolge + 1 : 0
+
+  // Reputationsverlust nur genau beim Erreichen der zweiten Minus-Woche in Folge,
+  // nicht bei jeder weiteren Woche danach.
+  const reputation =
+    minusWochenInFolge === 2 ? Math.max(0, state.venue.reputation - 5) : state.venue.reputation
+
+  // Bleibt true, bis eine Entlassung erfolgt (siehe ENTLASSEN) - wird hier also nicht
+  // zurückgesetzt, falls bereits ausstehend.
+  const zwangsentlassungAusstehend =
+    state.zwangsentlassungAusstehend || minusWochenInFolge >= 3
+
+  return {
+    ...state,
+    techniker: state.techniker.map((t) => ({ ...t, verplanteStunden: 0 })),
+    venue: { ...state.venue, budget: neuesBudget, reputation },
+    minusWochenInFolge,
+    zwangsentlassungAusstehend,
   }
 }
 
@@ -541,15 +623,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         activeShowAct: action.act,
-        view: 'ablauf',
+        // Bewusst NICHT mehr view: 'ablauf' - der Spieler bleibt auf dem Dashboard
+        // und kann dort weiterarbeiten (z.B. eine zweite Show staffen), während
+        // der Ablauf im Hintergrund läuft (siehe TICK).
+        view: 'dashboard',
         ablaufStatus: {
           act: action.act,
-          startZeitpunkt: Date.now(),
-          pausiertSeit: null,
+          aufbauEndeMinute: action.aufbauEndeMinute,
+          soundcheckMinute: action.soundcheckMinute,
+          showStartMinute: action.showStartMinute,
+          showEndeMinute: action.showEndeMinute,
+          abbauEndeMinute: action.abbauEndeMinute,
           pausierGrund: null,
-          aufbauEndeSekunde: action.aufbauEndeSekunde,
-          showEndeSekunde: action.showEndeSekunde,
-          abbauEndeSekunde: action.abbauEndeSekunde,
           ereignisZeitpunkte: action.ereignisZeitpunkte,
           ereignisGeprüft: { aufbau: false, show: false, abbau: false },
           soundcheckBestätigt: false,
@@ -558,82 +643,43 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         },
       }
 
-    case 'SOUNDCHECK_ERREICHT': {
-      if (!state.ablaufStatus) return state
-      return {
-        ...state,
-        ablaufStatus: {
-          ...state.ablaufStatus,
-          pausiertSeit: Date.now(),
-          pausierGrund: 'soundcheck',
-        },
-      }
-    }
-
     case 'SOUNDCHECK_BESTÄTIGEN': {
-      if (!state.ablaufStatus || state.ablaufStatus.pausiertSeit === null) return state
+      if (!state.ablaufStatus || state.tagesUhr.pausiertSeit === null) return state
       return {
         ...state,
         ablaufStatus: {
           ...state.ablaufStatus,
           soundcheckBestätigt: true,
-          startZeitpunkt:
-            state.ablaufStatus.startZeitpunkt + (Date.now() - state.ablaufStatus.pausiertSeit),
-          pausiertSeit: null,
           pausierGrund: null,
         },
-      }
-    }
-
-    case 'SOUNDCHECK_ABBRECHEN':
-      return { ...state, ablaufStatus: null, view: 'staffing' }
-
-    case 'EREIGNIS_GEPRÜFT': {
-      if (!state.ablaufStatus) return state
-      return {
-        ...state,
-        ablaufStatus: {
-          ...state.ablaufStatus,
-          ereignisGeprüft: { ...state.ablaufStatus.ereignisGeprüft, [action.phase]: true },
+        tagesUhr: {
+          ...state.tagesUhr,
+          tagStartZeitpunkt:
+            state.tagesUhr.tagStartZeitpunkt + (Date.now() - state.tagesUhr.pausiertSeit),
+          pausiertSeit: null,
         },
       }
     }
 
-    case 'EREIGNIS_AUTOMATISCH_ANGEWENDET': {
-      if (!state.ablaufStatus) return state
-      return {
-        ...state,
-        ablaufStatus: {
-          ...state.ablaufStatus,
-          ereignisGeprüft: { ...state.ablaufStatus.ereignisGeprüft, [action.phase]: true },
-          gesammelteEreignisse: [
-            ...state.ablaufStatus.gesammelteEreignisse,
-            { effekt: action.effekt, beschreibung: action.beschreibung, phase: action.phase },
-          ],
-        },
-      }
-    }
-
-    case 'EREIGNIS_AUFGETRETEN': {
-      if (!state.ablaufStatus) return state
-      return {
-        ...state,
-        aktivesEreignis: action.ereignis,
-        view: 'ereignis',
-        ablaufStatus: {
-          ...state.ablaufStatus,
-          ereignisGeprüft: { ...state.ablaufStatus.ereignisGeprüft, [action.phase]: true },
-          pausiertSeit: Date.now(),
-          pausierGrund: 'ereignis',
-          aktuellePhaseFürEreignis: action.phase,
-        },
-      }
+    case 'SOUNDCHECK_ABBRECHEN': {
+      // Zeit fortsetzen (Pause auflösen), BEVOR ablaufStatus gelöscht wird - sonst
+      // bliebe die tagesUhr für immer eingefroren.
+      const tagesUhr =
+        state.tagesUhr.pausiertSeit !== null
+          ? {
+              ...state.tagesUhr,
+              tagStartZeitpunkt:
+                state.tagesUhr.tagStartZeitpunkt + (Date.now() - state.tagesUhr.pausiertSeit),
+              pausiertSeit: null,
+            }
+          : state.tagesUhr
+      return { ...state, ablaufStatus: null, view: 'staffing', tagesUhr }
     }
 
     case 'EREIGNIS_REAGIEREN': {
       const ereignis = state.aktivesEreignis
       if (!ereignis) return state
-      if (!state.ablaufStatus || state.ablaufStatus.pausiertSeit === null) return state
+      if (!state.ablaufStatus || state.tagesUhr.pausiertSeit === null) return state
 
       const reaktion = action.reaktion === 'A' ? ereignis.reaktionA : ereignis.reaktionB
       const phase = state.ablaufStatus.aktuellePhaseFürEreignis ?? 'aufbau'
@@ -641,12 +687,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       return {
         ...state,
         aktivesEreignis: null,
-        view: 'ablauf',
         ablaufStatus: {
           ...state.ablaufStatus,
-          startZeitpunkt:
-            state.ablaufStatus.startZeitpunkt + (Date.now() - state.ablaufStatus.pausiertSeit),
-          pausiertSeit: null,
           pausierGrund: null,
           aktuellePhaseFürEreignis: null,
           gesammelteEreignisse: [
@@ -654,46 +696,139 @@ function gameReducer(state: GameState, action: GameAction): GameState {
             { effekt: reaktion.effekt, beschreibung: ereignis.beschreibung, phase },
           ],
         },
+        tagesUhr: {
+          ...state.tagesUhr,
+          tagStartZeitpunkt:
+            state.tagesUhr.tagStartZeitpunkt + (Date.now() - state.tagesUhr.pausiertSeit),
+          pausiertSeit: null,
+        },
       }
     }
 
-    case 'TICK_TAG': {
-      const { tagesUhr } = state
+    case 'TICK': {
+      const { tagesUhr, ablaufStatus } = state
 
+      // 1. Blackout läuft - erst beenden (neuer Tag beginnt), wenn die Dauer um ist.
       if (tagesUhr.blackoutBis !== null) {
-        // Blackout läuft - erst beenden (neuer Tag beginnt), wenn die Dauer um ist.
-        if (Date.now() >= tagesUhr.blackoutBis) {
-          return {
-            ...state,
-            tagesUhr: { tag: tagesUhr.tag + 1, tagStartZeitpunkt: Date.now(), blackoutBis: null },
-          }
+        if (Date.now() < tagesUhr.blackoutBis) return state
+
+        const neuerTag = tagesUhr.tag + 1
+        const neuerState: GameState = {
+          ...state,
+          tagesUhr: { tag: neuerTag, tagStartZeitpunkt: Date.now(), pausiertSeit: null, blackoutBis: null },
         }
-        return state
+        // Automatischer Wochenabschluss: der Übergang VON Tag 7 zu Tag 8 markiert
+        // das Ende von Woche 1, usw. - nicht beim allerersten Tag (Spielstart).
+        if (neuerTag !== 1 && (neuerTag - 1) % 7 === 0) {
+          return wendeWochenabschlussAn(neuerState)
+        }
+        return neuerState
       }
 
-      const vergangeneSekundenHeute = (Date.now() - tagesUhr.tagStartZeitpunkt) / 1000
-      if (vergangeneSekundenHeute >= TAG_ENDE_SEKUNDEN) {
-        // 21:00 erreicht - Blackout nur starten, wenn gerade keine Show im Ablauf ist.
-        // Läuft eine Show noch, wird hier einfach nichts getan und beim nächsten Tick
-        // erneut geprüft, bis die Show fertig ist (kein Tageswechsel mitten in der Show).
-        if (state.ablaufStatus === null) {
+      // 2. Soundcheck oder Ereignis offen - alles eingefroren, nichts tun.
+      if (tagesUhr.pausiertSeit !== null) return state
+
+      const aktuelleMinute = ermittleAktuelleMinute(tagesUhr)
+
+      // 3. Tagesende erreicht und kein Ablauf aktiv -> Blackout starten.
+      if (aktuelleMinute >= TAGESENDE_MINUTE && ablaufStatus === null) {
+        return {
+          ...state,
+          tagesUhr: { ...tagesUhr, blackoutBis: Date.now() + BLACKOUT_DAUER_MS },
+        }
+      }
+
+      if (ablaufStatus === null) return state
+
+      // 4. Soundcheck-Gate: Aufbau vorbei, aber noch nicht bestätigt -> pausieren.
+      if (!ablaufStatus.soundcheckBestätigt && aktuelleMinute >= ablaufStatus.soundcheckMinute) {
+        return {
+          ...state,
+          ablaufStatus: { ...ablaufStatus, pausierGrund: 'soundcheck' },
+          tagesUhr: { ...tagesUhr, pausiertSeit: Date.now() },
+        }
+      }
+
+      // 5. Aktuelle Phase ermitteln (show/abbau erst nach bestätigtem Soundcheck erreichbar,
+      // was durch das Gate in Schritt 4 sichergestellt ist).
+      let phase: EreignisPhase | 'wartezeit' | 'fertig'
+      if (aktuelleMinute < ablaufStatus.aufbauEndeMinute) {
+        phase = 'aufbau'
+      } else if (aktuelleMinute < ablaufStatus.showStartMinute) {
+        // Wartezeit zwischen Aufbau-Ende und Show-Start (z.B. wenn der Aufbau früh
+        // am Tag fertig ist) - keine Ereignis-Prüfung nötig.
+        phase = 'wartezeit'
+      } else if (aktuelleMinute < ablaufStatus.showEndeMinute) {
+        phase = 'show'
+      } else if (aktuelleMinute < ablaufStatus.abbauEndeMinute) {
+        phase = 'abbau'
+      } else {
+        phase = 'fertig'
+      }
+
+      if (phase === 'aufbau' || phase === 'show' || phase === 'abbau') {
+        const ereignisZeitpunkt = ablaufStatus.ereignisZeitpunkte[phase]
+        const bereitsGeprüft = ablaufStatus.ereignisGeprüft[phase]
+        if (aktuelleMinute >= ereignisZeitpunkt && !bereitsGeprüft) {
+          const show = state.shows.find((s) => s.act === ablaufStatus.act)
+          if (!show) return state
+
+          const ergebnis = ermittleEreignisFürPhase(
+            phase,
+            show,
+            state.techniker,
+            state.verleiher,
+            state.venue
+          )
+
+          if (!ergebnis) {
+            return {
+              ...state,
+              ablaufStatus: {
+                ...ablaufStatus,
+                ereignisGeprüft: { ...ablaufStatus.ereignisGeprüft, [phase]: true },
+              },
+            }
+          }
+
+          if (ergebnis.typ === 'automatisch') {
+            return {
+              ...state,
+              ablaufStatus: {
+                ...ablaufStatus,
+                ereignisGeprüft: { ...ablaufStatus.ereignisGeprüft, [phase]: true },
+                gesammelteEreignisse: [
+                  ...ablaufStatus.gesammelteEreignisse,
+                  { effekt: ergebnis.effekt, beschreibung: ergebnis.beschreibung, phase },
+                ],
+              },
+            }
+          }
+
           return {
             ...state,
-            tagesUhr: { ...tagesUhr, blackoutBis: Date.now() + BLACKOUT_DAUER_MS },
+            aktivesEreignis: ergebnis.ereignis,
+            ablaufStatus: {
+              ...ablaufStatus,
+              ereignisGeprüft: { ...ablaufStatus.ereignisGeprüft, [phase]: true },
+              pausierGrund: 'ereignis',
+              aktuellePhaseFürEreignis: phase,
+            },
+            tagesUhr: { ...tagesUhr, pausiertSeit: Date.now() },
           }
         }
       }
+
+      if (phase === 'fertig') {
+        const neuerState = führeShowAuflösungDurch(
+          state,
+          ablaufStatus.act,
+          ablaufStatus.gesammelteEreignisse
+        )
+        return { ...neuerState, ablaufStatus: null }
+      }
+
       return state
-    }
-
-    case 'ABLAUF_ABSCHLIESSEN': {
-      if (!state.ablaufStatus) return state
-      const neuerState = führeShowAuflösungDurch(
-        state,
-        state.ablaufStatus.act,
-        state.ablaufStatus.gesammelteEreignisse
-      )
-      return { ...neuerState, ablaufStatus: null }
     }
 
     case 'BACK_TO_DASHBOARD':
@@ -705,37 +840,9 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         aktivesEreignis: null,
       }
 
-    case 'WOCHE_ABSCHLIESSEN': {
-      const gehaltssumme = state.techniker.reduce((summe, t) => summe + t.gehalt, 0)
-      const neuesBudget = state.venue.budget - gehaltssumme
-
-      const minusWochenInFolge = neuesBudget < 0 ? state.minusWochenInFolge + 1 : 0
-
-      // Reputationsverlust nur genau beim Erreichen der zweiten Minus-Woche in Folge,
-      // nicht bei jeder weiteren Woche danach.
-      const reputation =
-        minusWochenInFolge === 2
-          ? Math.max(0, state.venue.reputation - 5)
-          : state.venue.reputation
-
-      // Bleibt true, bis eine Entlassung erfolgt (siehe ENTLASSEN) - wird hier also nicht
-      // zurückgesetzt, falls bereits ausstehend.
-      const zwangsentlassungAusstehend =
-        state.zwangsentlassungAusstehend || minusWochenInFolge >= 3
-
-      return {
-        ...state,
-        woche: state.woche + 1,
-        techniker: state.techniker.map((t) => ({ ...t, verplanteStunden: 0 })),
-        venue: { ...state.venue, budget: neuesBudget, reputation },
-        minusWochenInFolge,
-        zwangsentlassungAusstehend,
-      }
-    }
-
     case 'ENTLASSEN': {
       // Nur relevant, wenn tatsächlich eine Zwangsentlassung aussteht (siehe
-      // WOCHE_ABSCHLIESSEN). Ohne ausstehende Krise bleibt der Techniker-Bestand
+      // wendeWochenabschlussAn). Ohne ausstehende Krise bleibt der Techniker-Bestand
       // unverändert, statt versehentlich freiwillige Entlassungen zuzulassen.
       if (!state.zwangsentlassungAusstehend) return state
 
@@ -753,6 +860,8 @@ function gameReducer(state: GameState, action: GameAction): GameState {
 }
 
 interface GameContextValue extends GameState {
+  /** Aus tagesUhr.tag abgeleitet (siehe ermittleWoche) - immer konsistent mit dem aktuellen Tag. */
+  woche: number
   annehmen: (act: string) => void
   ablehnen: (act: string) => void
   openStaffing: (act: string) => void
@@ -760,17 +869,16 @@ interface GameContextValue extends GameState {
   assignVerleiher: (act: string, kategorie: EquipmentKategorie, name: string | null) => void
   toggleÜberstunden: (act: string, rolle: TechnikerRolle, aktiv: boolean) => void
   resolveShow: (act: string) => void
-  /** Fortschritts-Tick der Show-Uhr; von einem globalen Interval regelmäßig aufzurufen. */
+  /** Fortschritts-Tick der Spieluhr; von einem globalen Interval regelmäßig aufzurufen. */
   tickAblauf: () => void
   soundcheckBestätigen: () => void
   soundcheckAbbrechen: () => void
   ereignisReagieren: (reaktion: 'A' | 'B') => void
   backToDashboard: () => void
-  wocheAbschliessen: () => void
   entlassen: (name: string) => void
   speichern: () => void
   activeShow: Anfrage | null
-  /** Summe der wöchentlichen Gehälter aller aktuellen Techniker (Abzug bei nächstem wocheAbschliessen()). */
+  /** Summe der wöchentlichen Gehälter aller aktuellen Techniker (Abzug beim nächsten automatischen Wochenabschluss). */
   wochenGehaltssumme: number
 }
 
@@ -790,6 +898,7 @@ export function GameProvider({
     const wochenGehaltssumme = state.techniker.reduce((summe, t) => summe + t.gehalt, 0)
     return {
       ...state,
+      woche: ermittleWoche(state.tagesUhr.tag),
       activeShow,
       wochenGehaltssumme,
       annehmen: (act) => dispatch({ type: 'ANNEHMEN', act }),
@@ -805,105 +914,35 @@ export function GameProvider({
         const show = state.shows.find((s) => s.act === act)
         if (!show) return
 
-        const { aufbau, show: showStunden, abbau } = phasenStunden(show)
-        const aufbauSek = aufbau * SEKUNDEN_PRO_SPIELSTUNDE
-        const showSek = showStunden * SEKUNDEN_PRO_SPIELSTUNDE
-        const abbauSek = abbau * SEKUNDEN_PRO_SPIELSTUNDE
-
-        const aufbauEndeSekunde = aufbauSek
-        const showEndeSekunde = aufbauSek + showSek
-        const abbauEndeSekunde = aufbauSek + showSek + abbauSek
+        const aufbauStartMinute = ermittleAktuelleMinute(state.tagesUhr)
+        const aufbauEndeMinute = aufbauStartMinute + AUFBAU_DAUER_MINUTEN
+        const soundcheckMinute = Math.max(SOUNDCHECK_FIXE_MINUTE, aufbauEndeMinute)
+        const showStartMinute = Math.max(SHOW_START_FIXE_MINUTE, soundcheckMinute)
+        const showEndeMinute = showStartMinute + SHOW_DAUER_MINUTEN
+        const abbauEndeMinute = showEndeMinute + ABBAU_DAUER_MINUTEN
 
         const ereignisZeitpunkte = {
-          aufbau: aufbauSek * (0.2 + Math.random() * 0.6),
-          show: aufbauSek + showSek * (0.2 + Math.random() * 0.6),
-          abbau: aufbauSek + showSek + abbauSek * (0.2 + Math.random() * 0.6),
+          aufbau: aufbauStartMinute + (aufbauEndeMinute - aufbauStartMinute) * (0.2 + Math.random() * 0.6),
+          show: showStartMinute + (showEndeMinute - showStartMinute) * (0.2 + Math.random() * 0.6),
+          abbau: showEndeMinute + (abbauEndeMinute - showEndeMinute) * (0.2 + Math.random() * 0.6),
         }
 
         dispatch({
           type: 'ABLAUF_STARTEN',
           act,
-          aufbauEndeSekunde,
-          showEndeSekunde,
-          abbauEndeSekunde,
+          aufbauEndeMinute,
+          soundcheckMinute,
+          showStartMinute,
+          showEndeMinute,
+          abbauEndeMinute,
           ereignisZeitpunkte,
         })
       },
-      tickAblauf: () => {
-        // Tages-Uhr läuft unabhängig vom Show-Ablauf immer mit - deshalb VOR dem
-        // early return unten, das nur die show-bezogene Ablauf-Logik betrifft.
-        dispatch({ type: 'TICK_TAG' })
-
-        const status = state.ablaufStatus
-        if (!status || status.pausiertSeit !== null) return
-
-        const vergangeneSekunden = (Date.now() - status.startZeitpunkt) / 1000
-
-        // Soundcheck-Gate: Aufbau vorbei, aber noch nicht bestätigt -> pausieren.
-        if (
-          vergangeneSekunden >= status.aufbauEndeSekunde &&
-          !status.soundcheckBestätigt &&
-          status.pausierGrund === null
-        ) {
-          dispatch({ type: 'SOUNDCHECK_ERREICHT' })
-          return
-        }
-
-        // Aktuelle Phase ermitteln (show/abbau erst nach bestätigtem Soundcheck erreichbar).
-        let phase: EreignisPhase | 'fertig'
-        if (vergangeneSekunden < status.aufbauEndeSekunde) {
-          phase = 'aufbau'
-        } else if (!status.soundcheckBestätigt) {
-          // Aufbau fertig, wartet auf Soundcheck-Bestätigung - nichts weiter zu tun.
-          return
-        } else if (vergangeneSekunden < status.showEndeSekunde) {
-          phase = 'show'
-        } else if (vergangeneSekunden < status.abbauEndeSekunde) {
-          phase = 'abbau'
-        } else {
-          phase = 'fertig'
-        }
-
-        if (phase !== 'fertig') {
-          const ereignisZeitpunkt = status.ereignisZeitpunkte[phase]
-          const bereitsGeprüft = status.ereignisGeprüft[phase]
-          if (vergangeneSekunden >= ereignisZeitpunkt && !bereitsGeprüft) {
-            const show = state.shows.find((s) => s.act === status.act)
-            if (!show) return
-
-            const ergebnis = ermittleEreignisFürPhase(
-              phase,
-              show,
-              state.techniker,
-              state.verleiher,
-              state.venue
-            )
-
-            if (!ergebnis) {
-              dispatch({ type: 'EREIGNIS_GEPRÜFT', phase })
-            } else if (ergebnis.typ === 'automatisch') {
-              dispatch({
-                type: 'EREIGNIS_AUTOMATISCH_ANGEWENDET',
-                phase,
-                beschreibung: ergebnis.beschreibung,
-                effekt: ergebnis.effekt,
-              })
-            } else {
-              dispatch({ type: 'EREIGNIS_AUFGETRETEN', ereignis: ergebnis.ereignis, phase })
-            }
-            return
-          }
-        }
-
-        if (phase === 'fertig' && status.pausierGrund === null) {
-          dispatch({ type: 'ABLAUF_ABSCHLIESSEN' })
-        }
-      },
+      tickAblauf: () => dispatch({ type: 'TICK' }),
       soundcheckBestätigen: () => dispatch({ type: 'SOUNDCHECK_BESTÄTIGEN' }),
       soundcheckAbbrechen: () => dispatch({ type: 'SOUNDCHECK_ABBRECHEN' }),
       ereignisReagieren: (reaktion) => dispatch({ type: 'EREIGNIS_REAGIEREN', reaktion }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
-      wocheAbschliessen: () => dispatch({ type: 'WOCHE_ABSCHLIESSEN' }),
       entlassen: (name) => dispatch({ type: 'ENTLASSEN', name }),
       speichern: () => {
         try {
@@ -912,7 +951,6 @@ export function GameProvider({
             techniker: state.techniker,
             verleiher: state.verleiher,
             shows: state.shows,
-            woche: state.woche,
             minusWochenInFolge: state.minusWochenInFolge,
             zwangsentlassungAusstehend: state.zwangsentlassungAusstehend,
             tagesUhr: state.tagesUhr,

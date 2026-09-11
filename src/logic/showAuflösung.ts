@@ -41,15 +41,6 @@ export function geschätzteShowStunden(anfrage: Anfrage): number {
   return 9 + Math.ceil(Math.max(0, anfrage.erwarteteBesucherzahl - 500) / 500)
 }
 
-/**
- * Teilt die Gesamtdauer einer Show (siehe geschätzteShowStunden) in ihre drei
- * Phasen auf. Die Summe der drei Werte entspricht immer geschätzteShowStunden(anfrage).
- */
-export function phasenStunden(anfrage: Anfrage): { aufbau: number; show: number; abbau: number } {
-  const zusatz = Math.ceil(Math.max(0, anfrage.erwarteteBesucherzahl - 500) / 500)
-  return { aufbau: 4 + zusatz, show: 3, abbau: 2 }
-}
-
 /** Liefert die für ein Genre benötigten Rollen samt Anforderung. */
 export function benötigteRollen(
   genre: Genre

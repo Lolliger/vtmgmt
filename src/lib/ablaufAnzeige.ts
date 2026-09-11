@@ -1,49 +1,54 @@
-import type { AblaufStatus } from '@/state/GameContext'
+import { AUFBAU_DAUER_MINUTEN, type AblaufStatus } from '@/state/GameContext'
 
 /**
- * Rein kosmetische Phasen-Ableitung für die Anzeige (Uhr, Fortschrittsbalken,
+ * Rein kosmetische Phasen-Ableitung für die Anzeige (Widget, Fortschrittsbalken,
  * Flavor-Text). Trifft keine Spiel-Entscheidungen - die eigentliche
  * Phasenlogik (wann pausiert/aufgelöst wird) lebt in GameContext/tickAblauf.
+ * Der Soundcheck-Gate-Zustand (ablaufStatus.pausierGrund === 'soundcheck') hat
+ * hier bewusst KEINE eigene Phase mehr - er wird über einen eigenen Dialog
+ * (SoundcheckDialog) angezeigt, während das Widget im Hintergrund einfach die
+ * zuletzt erreichte Phase (aufbau/wartezeit) weiterzeigt.
  */
-export type AblaufPhase = 'aufbau' | 'soundcheck' | 'show' | 'abbau'
+export type AblaufPhase = 'aufbau' | 'wartezeit' | 'show' | 'abbau'
 
 export const PHASE_LABEL: Record<AblaufPhase, string> = {
   aufbau: 'Aufbau',
-  soundcheck: 'Soundcheck',
+  wartezeit: 'Wartezeit',
   show: 'Show',
   abbau: 'Abbau',
 }
 
-/** Leitet aus Status + vergangenen Sekunden die aktuelle Phase für die Anzeige ab. */
-export function ermittlePhase(status: AblaufStatus, vergangeneSekunden: number): AblaufPhase {
-  if (vergangeneSekunden < status.aufbauEndeSekunde) return 'aufbau'
-  if (!status.soundcheckBestätigt) return 'soundcheck'
-  if (vergangeneSekunden < status.showEndeSekunde) return 'show'
+/** Leitet aus Status + aktueller Spielminute (seit Mitternacht) die aktuelle Phase für die Anzeige ab. */
+export function ermittlePhase(status: AblaufStatus, aktuelleMinute: number): AblaufPhase {
+  if (aktuelleMinute < status.aufbauEndeMinute) return 'aufbau'
+  if (aktuelleMinute < status.showStartMinute) return 'wartezeit'
+  if (aktuelleMinute < status.showEndeMinute) return 'show'
   return 'abbau'
 }
 
 /** Fortschritt (0-100) der aktuellen Phase innerhalb ihres Zeitfensters. */
-export function phasenFortschritt(status: AblaufStatus, vergangeneSekunden: number): number {
-  const phase = ermittlePhase(status, vergangeneSekunden)
+export function phasenFortschritt(status: AblaufStatus, aktuelleMinute: number): number {
+  const phase = ermittlePhase(status, aktuelleMinute)
 
   let start: number
   let ende: number
   if (phase === 'aufbau') {
-    start = 0
-    ende = status.aufbauEndeSekunde
-  } else if (phase === 'soundcheck') {
-    return 100
+    start = status.aufbauEndeMinute - AUFBAU_DAUER_MINUTEN
+    ende = status.aufbauEndeMinute
+  } else if (phase === 'wartezeit') {
+    start = status.aufbauEndeMinute
+    ende = status.showStartMinute
   } else if (phase === 'show') {
-    start = status.aufbauEndeSekunde
-    ende = status.showEndeSekunde
+    start = status.showStartMinute
+    ende = status.showEndeMinute
   } else {
-    start = status.showEndeSekunde
-    ende = status.abbauEndeSekunde
+    start = status.showEndeMinute
+    ende = status.abbauEndeMinute
   }
 
   const dauer = ende - start
   if (dauer <= 0) return 100
-  return Math.min(100, Math.max(0, ((vergangeneSekunden - start) / dauer) * 100))
+  return Math.min(100, Math.max(0, ((aktuelleMinute - start) / dauer) * 100))
 }
 
 /** Rotierender Flavor-Text je nach Fortschritt innerhalb der Phase - rein kosmetisch. */
@@ -52,6 +57,9 @@ export function ermittleFlavorText(phase: AblaufPhase, fortschritt: number): str
     if (fortschritt < 33) return 'Equipment wird angeliefert...'
     if (fortschritt < 66) return 'Bühne wird aufgebaut...'
     return 'Letzte Vorbereitungen laufen...'
+  }
+  if (phase === 'wartezeit') {
+    return 'Bereit, wartet auf den Abend...'
   }
   if (phase === 'show') {
     if (fortschritt < 33) return 'Publikum strömt in die Halle...'
@@ -62,24 +70,4 @@ export function ermittleFlavorText(phase: AblaufPhase, fortschritt: number): str
     return fortschritt < 50 ? 'Equipment wird abgebaut...' : 'Fahrzeuge werden beladen...'
   }
   return null
-}
-
-const START_STUNDE = 8
-
-/**
- * Formatiert eine simulierte Spiel-Uhrzeit ("14:32 Uhr"), beginnend um 08:00
- * bei Ablauf-Start. `sekundenProSpielstunde` kommt aus GameContext
- * (SEKUNDEN_PRO_SPIELSTUNDE), damit die Anzeige nie vom echten Spieltempo
- * abweicht.
- */
-export function formatSpielUhrzeit(
-  vergangeneSekunden: number,
-  sekundenProSpielstunde: number
-): string {
-  const stundenSeitStart = vergangeneSekunden / sekundenProSpielstunde
-  const gesamtMinuten = START_STUNDE * 60 + stundenSeitStart * 60
-  const minutenImTag = ((gesamtMinuten % 1440) + 1440) % 1440
-  const stunde = Math.floor(minutenImTag / 60)
-  const minute = Math.floor(minutenImTag % 60)
-  return `${String(stunde).padStart(2, '0')}:${String(minute).padStart(2, '0')} Uhr`
 }

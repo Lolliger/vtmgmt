@@ -42,14 +42,12 @@ export function Dashboard() {
     ablehnen,
     openStaffing,
     speichern,
-    wocheAbschliessen,
     wochenGehaltssumme,
     minusWochenInFolge,
     zwangsentlassungAusstehend,
     entlassen,
   } = useGame()
   const [gespeichertHinweis, setGespeichertHinweis] = useState(false)
-  const [neueWocheHinweis, setNeueWocheHinweis] = useState(false)
 
   const offeneAnfragen = shows.filter((s) => s.status === 'offen')
   const anstehendeShows = shows.filter((s) => s.status === 'angenommen')
@@ -58,12 +56,6 @@ export function Dashboard() {
     speichern()
     setGespeichertHinweis(true)
     setTimeout(() => setGespeichertHinweis(false), 2000)
-  }
-
-  function handleWocheAbschliessen() {
-    wocheAbschliessen()
-    setNeueWocheHinweis(true)
-    setTimeout(() => setNeueWocheHinweis(false), 2000)
   }
 
   return (
@@ -112,18 +104,12 @@ export function Dashboard() {
           <CardTitle className="text-xl">{venue.name}</CardTitle>
           <CardDescription>Venue-Übersicht · Woche {woche}</CardDescription>
           <CardAction className="flex items-center gap-2">
-            {neueWocheHinweis && (
-              <span className="text-sm text-muted-foreground">Neue Woche gestartet ✓</span>
-            )}
             {gespeichertHinweis && (
               <span className="text-sm text-muted-foreground">Gespeichert ✓</span>
             )}
             <span className="text-sm text-muted-foreground">
-              Nächste Woche fällig: −{budgetFormatter.format(wochenGehaltssumme)} Gehälter
+              Nächster Wochenabschluss: −{budgetFormatter.format(wochenGehaltssumme)} Gehälter
             </span>
-            <Button size="sm" onClick={handleWocheAbschliessen}>
-              Woche abschließen
-            </Button>
             <Button size="sm" variant="outline" onClick={handleSpeichern}>
               Speichern
             </Button>
