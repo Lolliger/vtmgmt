@@ -24,11 +24,12 @@ export interface AuflösungsAnzeige {
   auswirkungen: string[]
 }
 
-interface GameState {
+export interface GameState {
   venue: Venue
   techniker: Techniker[]
   verleiher: Verleiher[]
   shows: Anfrage[]
+  woche: number
   view: View
   activeShowAct: string | null
   letzteAuflösung: AuflösungsAnzeige | null
@@ -49,14 +50,98 @@ type GameAction =
   | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
 
-const initialState: GameState = {
-  venue,
-  techniker,
-  verleiher,
-  shows: anfragen,
-  view: 'dashboard',
-  activeShowAct: null,
-  letzteAuflösung: null,
+export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
+
+interface GespeicherterSpielstand {
+  venue: Venue
+  techniker: Techniker[]
+  verleiher: Verleiher[]
+  shows: Anfrage[]
+  woche: number
+}
+
+function istGespeicherterSpielstand(value: unknown): value is GespeicherterSpielstand {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return (
+    v.venue !== undefined &&
+    Array.isArray(v.techniker) &&
+    Array.isArray(v.verleiher) &&
+    Array.isArray(v.shows) &&
+    typeof v.woche === 'number'
+  )
+}
+
+/**
+ * Baut einen frischen Spielstand aus den Dummy-Ausgangsdaten (neues Spiel).
+ */
+export function baueNeuenSpielstand(): GameState {
+  return {
+    venue,
+    techniker,
+    verleiher,
+    shows: anfragen,
+    woche: 1,
+    view: 'dashboard',
+    activeShowAct: null,
+    letzteAuflösung: null,
+  }
+}
+
+/**
+ * Prüft, ob unter SPIELSTAND_KEY ein Spielstand in localStorage liegt.
+ * Gibt false zurück (statt zu crashen), wenn localStorage nicht verfügbar ist.
+ */
+export function hatGespeichertenSpielstand(): boolean {
+  try {
+    return localStorage.getItem(SPIELSTAND_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Lädt den gespeicherten Spielstand aus localStorage. Navigations-State
+ * (view/activeShowAct/letzteAuflösung) wird bewusst NICHT wiederhergestellt,
+ * sondern immer frisch gesetzt.
+ * Gibt bei fehlendem Eintrag, Parse-Fehler oder fehlenden Feldern null zurück.
+ */
+export function ladeGespeichertenSpielstand(): GameState | null {
+  try {
+    const roh = localStorage.getItem(SPIELSTAND_KEY)
+    if (roh === null) return null
+
+    const geparst: unknown = JSON.parse(roh)
+    if (!istGespeicherterSpielstand(geparst)) {
+      console.warn('Gespeicherter Spielstand hat unerwartetes Format, wird ignoriert.')
+      return null
+    }
+
+    return {
+      venue: geparst.venue,
+      techniker: geparst.techniker,
+      verleiher: geparst.verleiher,
+      shows: geparst.shows,
+      woche: geparst.woche,
+      view: 'dashboard',
+      activeShowAct: null,
+      letzteAuflösung: null,
+    }
+  } catch (error) {
+    console.warn('Gespeicherter Spielstand konnte nicht geladen werden:', error)
+    return null
+  }
+}
+
+/**
+ * Entfernt den gespeicherten Spielstand aus localStorage.
+ */
+export function loescheGespeichertenSpielstand(): void {
+  try {
+    localStorage.removeItem(SPIELSTAND_KEY)
+  } catch {
+    // localStorage nicht verfügbar - nichts zu tun
+  }
 }
 
 function updateShow(
@@ -175,13 +260,20 @@ interface GameContextValue extends GameState {
   toggleÜberstunden: (act: string, rolle: TechnikerRolle, aktiv: boolean) => void
   resolveShow: (act: string) => void
   backToDashboard: () => void
+  speichern: () => void
   activeShow: Anfrage | null
 }
 
 const GameContext = createContext<GameContextValue | null>(null)
 
-export function GameProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(gameReducer, initialState)
+export function GameProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode
+  initialState?: GameState
+}) {
+  const [state, dispatch] = useReducer(gameReducer, initialState ?? baueNeuenSpielstand())
 
   const value = useMemo<GameContextValue>(() => {
     const activeShow = state.shows.find((s) => s.act === state.activeShowAct) ?? null
@@ -199,6 +291,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'TOGGLE_ÜBERSTUNDEN', act, rolle, aktiv }),
       resolveShow: (act) => dispatch({ type: 'RESOLVE_SHOW', act }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
+      speichern: () => {
+        try {
+          const spielstand: GespeicherterSpielstand = {
+            venue: state.venue,
+            techniker: state.techniker,
+            verleiher: state.verleiher,
+            shows: state.shows,
+            woche: state.woche,
+          }
+          localStorage.setItem(SPIELSTAND_KEY, JSON.stringify(spielstand))
+        } catch (error) {
+          console.error('Spielstand konnte nicht gespeichert werden:', error)
+        }
+      },
     }
   }, [state])
 

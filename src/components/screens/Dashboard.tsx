@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -28,10 +30,18 @@ const preisniveauLabel: Record<Preisniveau, string> = {
 }
 
 export function Dashboard() {
-  const { venue, techniker, verleiher, shows, annehmen, ablehnen, openStaffing } = useGame()
+  const { venue, techniker, verleiher, shows, annehmen, ablehnen, openStaffing, speichern } =
+    useGame()
+  const [gespeichertHinweis, setGespeichertHinweis] = useState(false)
 
   const offeneAnfragen = shows.filter((s) => s.status === 'offen')
   const anstehendeShows = shows.filter((s) => s.status === 'angenommen')
+
+  function handleSpeichern() {
+    speichern()
+    setGespeichertHinweis(true)
+    setTimeout(() => setGespeichertHinweis(false), 2000)
+  }
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -39,6 +49,14 @@ export function Dashboard() {
         <CardHeader>
           <CardTitle className="text-xl">{venue.name}</CardTitle>
           <CardDescription>Venue-Übersicht</CardDescription>
+          <CardAction className="flex items-center gap-2">
+            {gespeichertHinweis && (
+              <span className="text-sm text-muted-foreground">Gespeichert ✓</span>
+            )}
+            <Button size="sm" variant="outline" onClick={handleSpeichern}>
+              Speichern
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-8">

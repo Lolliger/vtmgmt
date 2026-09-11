@@ -1,7 +1,16 @@
+import { useState } from 'react'
 import { AuflösungScreen } from '@/components/screens/AuflösungScreen'
 import { Dashboard } from '@/components/screens/Dashboard'
 import { StaffingScreen } from '@/components/screens/StaffingScreen'
-import { GameProvider, useGame } from '@/state/GameContext'
+import { StartScreen } from '@/components/screens/StartScreen'
+import {
+  GameProvider,
+  hatGespeichertenSpielstand,
+  ladeGespeichertenSpielstand,
+  loescheGespeichertenSpielstand,
+  useGame,
+  type GameState,
+} from '@/state/GameContext'
 
 function Screens() {
   const { view } = useGame()
@@ -16,8 +25,35 @@ function Screens() {
 }
 
 function App() {
+  const [gestartet, setGestartet] = useState<GameState | 'neu' | null>(() =>
+    hatGespeichertenSpielstand() ? null : 'neu'
+  )
+
+  if (gestartet === null) {
+    return (
+      <StartScreen
+        onFortsetzen={() => {
+          const geladen = ladeGespeichertenSpielstand()
+          setGestartet(geladen ?? 'neu')
+        }}
+        onNeuesSpiel={() => {
+          loescheGespeichertenSpielstand()
+          setGestartet('neu')
+        }}
+      />
+    )
+  }
+
+  if (gestartet === 'neu') {
+    return (
+      <GameProvider>
+        <Screens />
+      </GameProvider>
+    )
+  }
+
   return (
-    <GameProvider>
+    <GameProvider initialState={gestartet}>
       <Screens />
     </GameProvider>
   )
