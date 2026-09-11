@@ -1,6 +1,6 @@
 import {
   GENRE_ANFORDERUNGEN,
-  erfülltMindeststufe,
+  STUFE_RANG,
   type RollenAnforderung,
 } from '@/data/genreAnforderungen'
 import type {
@@ -138,8 +138,17 @@ export function berechneAuflösung(
       punkte = 0
     } else {
       const person = techniker.find((t) => t.name === zugewiesenerName)
-      punkte =
-        person && erfülltMindeststufe(person.stufe, anforderung.minStufe) ? 100 : 50
+      if (!person) {
+        punkte = 0
+      } else {
+        const delta = STUFE_RANG[person.stufe] - STUFE_RANG[anforderung.minStufe]
+        if (delta <= -3) punkte = 0
+        else if (delta === -2) punkte = 15
+        else if (delta === -1) punkte = 45
+        else if (delta === 0) punkte = 80
+        else if (delta === 1) punkte = 90
+        else punkte = 100
+      }
     }
     summe += punkte
     if (punkte < schwächsterWert) {
@@ -160,7 +169,7 @@ export function berechneAuflösung(
     }
   }
 
-  const zufallsfaktor = Math.round(Math.random() * 20 - 10)
+  const zufallsfaktor = Math.round(Math.random() * 30 - 15)
 
   const gesamt = clamp(staffingScore * 0.6 + verleiherScore * 0.4 + zufallsfaktor, 0, 100)
 
