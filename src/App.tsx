@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AuflösungScreen } from '@/components/screens/AuflösungScreen'
 import { Dashboard } from '@/components/screens/Dashboard'
+import { EreignisScreen } from '@/components/screens/EreignisScreen'
 import { StaffingScreen } from '@/components/screens/StaffingScreen'
 import { StartScreen } from '@/components/screens/StartScreen'
 import {
@@ -20,6 +21,7 @@ function Screens() {
       {view === 'dashboard' && <Dashboard />}
       {view === 'staffing' && <StaffingScreen />}
       {view === 'auflösung' && <AuflösungScreen />}
+      {view === 'ereignis' && <EreignisScreen />}
     </div>
   )
 }

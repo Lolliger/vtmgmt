@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useReducer, type ReactNode } from 'react'
 import { anfragen, techniker, venue, verleiher } from '@/data/dummyData'
+import { ermittleEreignis, type Ereignis, type EreignisEffekt } from '@/logic/ereignisse'
 import {
   berechneAuflösung,
   berechneAuswirkungen,
@@ -17,7 +18,18 @@ import type {
 
 export { geschätzteShowStunden }
 
-export type View = 'dashboard' | 'staffing' | 'auflösung'
+export type View = 'dashboard' | 'staffing' | 'auflösung' | 'ereignis'
+
+const GUT_SCHWELLE = 80
+const MITTEL_SCHWELLE = 50
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function formatDelta(delta: number): string {
+  return `${delta >= 0 ? '+' : ''}${delta}`
+}
 
 export interface AuflösungsAnzeige {
   ergebnis: AuflösungsErgebnis
@@ -37,6 +49,8 @@ export interface GameState {
   minusWochenInFolge: number
   /** true, wenn der Spieler eine Zwangsentlassung durchführen muss (siehe ENTLASSEN). */
   zwangsentlassungAusstehend: boolean
+  /** Aktuell zur Reaktion anstehendes Zufallsereignis (view === 'ereignis'), sonst null. */
+  aktivesEreignis: Ereignis | null
 }
 
 type GameAction =
@@ -50,11 +64,18 @@ type GameAction =
       kategorie: EquipmentKategorie
       name: string | null
     }
-  | { type: 'RESOLVE_SHOW'; act: string }
+  | {
+      type: 'RESOLVE_SHOW'
+      act: string
+      ereignisEffekt?: EreignisEffekt
+      ereignisBeschreibung?: string
+    }
   | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
   | { type: 'WOCHE_ABSCHLIESSEN' }
   | { type: 'ENTLASSEN'; name: string }
+  | { type: 'EREIGNIS_AUFGETRETEN'; ereignis: Ereignis }
+  | { type: 'EREIGNIS_REAGIEREN'; reaktion: 'A' | 'B' }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -103,6 +124,7 @@ export function baueNeuenSpielstand(): GameState {
     letzteAuflösung: null,
     minusWochenInFolge: 0,
     zwangsentlassungAusstehend: false,
+    aktivesEreignis: null,
   }
 }
 
@@ -178,6 +200,7 @@ export function ladeGespeichertenSpielstand(): GameState | null {
       view: 'dashboard',
       activeShowAct: null,
       letzteAuflösung: null,
+      aktivesEreignis: null,
       // Fehlen bei älteren Spielständen ohne diese Felder - mit Default auffüllen.
       minusWochenInFolge:
         typeof geparst.minusWochenInFolge === 'number' ? geparst.minusWochenInFolge : 0,
@@ -209,6 +232,97 @@ function updateShow(
   updater: (show: Anfrage) => Anfrage
 ): Anfrage[] {
   return shows.map((show) => (show.act === act ? updater(show) : show))
+}
+
+/**
+ * Führt die eigentliche Show-Auflösung durch (Berechnung + Auswirkungen) und
+ * verrechnet optional den Effekt eines zuvor aufgetretenen Zufallsereignisses.
+ * Wird von RESOLVE_SHOW (kein Ereignis oder automatisches Ereignis) und von
+ * EREIGNIS_REAGIEREN (Reaktions-Ereignis nach Spielerentscheidung) genutzt.
+ * Ohne ereignisEffekt/ereignisBeschreibung ist das Ergebnis identisch zur
+ * bisherigen RESOLVE_SHOW-Logik.
+ */
+function führeShowAuflösungDurch(
+  state: GameState,
+  act: string,
+  ereignisEffekt?: EreignisEffekt,
+  ereignisBeschreibung?: string
+): GameState {
+  const show = state.shows.find((s) => s.act === act)
+  if (!show) return state
+
+  const rohErgebnis = berechneAuflösung(show, state.techniker, state.verleiher, state.venue)
+
+  let ergebnis = rohErgebnis
+  if (ereignisEffekt?.scoreDelta !== undefined) {
+    const neueGesamtpunktzahl = clamp(
+      rohErgebnis.gesamtpunktzahl + ereignisEffekt.scoreDelta,
+      0,
+      100
+    )
+    const neueKategorie =
+      neueGesamtpunktzahl >= GUT_SCHWELLE
+        ? 'gut'
+        : neueGesamtpunktzahl >= MITTEL_SCHWELLE
+          ? 'mittel'
+          : 'problematisch'
+    ergebnis = { ...rohErgebnis, gesamtpunktzahl: neueGesamtpunktzahl, kategorie: neueKategorie }
+  }
+
+  const {
+    venue: venueNachAuswirkungen,
+    techniker: technikerNachAuswirkungen,
+    verleiher: neueVerleiher,
+    auswirkungen: basisAuswirkungen,
+  } = berechneAuswirkungen(show, ergebnis, state.venue, state.techniker, state.verleiher)
+
+  const auswirkungen = [...basisAuswirkungen]
+  if (ereignisBeschreibung) {
+    auswirkungen.unshift(`Ereignis: ${ereignisBeschreibung}`)
+  }
+
+  let neuesVenue = venueNachAuswirkungen
+  if (ereignisEffekt?.budgetDelta !== undefined) {
+    neuesVenue = { ...neuesVenue, budget: neuesVenue.budget + ereignisEffekt.budgetDelta }
+    auswirkungen.push(`Budget ${formatDelta(ereignisEffekt.budgetDelta)}€ (Ereignis)`)
+  }
+  if (ereignisEffekt?.reputationDelta !== undefined) {
+    neuesVenue = {
+      ...neuesVenue,
+      reputation: clamp(neuesVenue.reputation + ereignisEffekt.reputationDelta, 0, 100),
+    }
+    auswirkungen.push(`Reputation ${formatDelta(ereignisEffekt.reputationDelta)} (Ereignis)`)
+  }
+
+  let neueTechniker = technikerNachAuswirkungen
+  if (ereignisEffekt?.moralDeltaZufälligerTechniker !== undefined) {
+    const zugewiesen = Object.values(show.zugewieseneTechniker).filter(
+      (n): n is string => !!n
+    )
+    if (zugewiesen.length > 0) {
+      const name = zugewiesen[Math.floor(Math.random() * zugewiesen.length)]
+      const delta = ereignisEffekt.moralDeltaZufälligerTechniker
+      neueTechniker = neueTechniker.map((t) =>
+        t.name === name ? { ...t, moral: clamp(t.moral + delta, 0, 100) } : t
+      )
+      auswirkungen.push(`${name}: Moral ${formatDelta(delta)} (Ereignis)`)
+    }
+  }
+
+  return {
+    ...state,
+    venue: neuesVenue,
+    techniker: neueTechniker,
+    verleiher: neueVerleiher,
+    shows: updateShow(state.shows, act, (s) => ({
+      ...s,
+      status: 'aufgelöst',
+      ergebnis: ergebnis.kategorie,
+    })),
+    view: 'auflösung',
+    letzteAuflösung: { ergebnis, auswirkungen },
+    aktivesEreignis: null,
+  }
 }
 
 function gameReducer(state: GameState, action: GameAction): GameState {
@@ -295,31 +409,25 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         })),
       }
 
-    case 'RESOLVE_SHOW': {
-      const show = state.shows.find((s) => s.act === action.act)
-      if (!show) return state
+    case 'RESOLVE_SHOW':
+      return führeShowAuflösungDurch(
+        state,
+        action.act,
+        action.ereignisEffekt,
+        action.ereignisBeschreibung
+      )
 
-      const ergebnis = berechneAuflösung(show, state.techniker, state.verleiher, state.venue)
-      const {
-        venue: neuesVenue,
-        techniker: neueTechniker,
-        verleiher: neueVerleiher,
-        auswirkungen,
-      } = berechneAuswirkungen(show, ergebnis, state.venue, state.techniker, state.verleiher)
+    case 'EREIGNIS_AUFGETRETEN':
+      return { ...state, aktivesEreignis: action.ereignis, view: 'ereignis' }
 
-      return {
-        ...state,
-        venue: neuesVenue,
-        techniker: neueTechniker,
-        verleiher: neueVerleiher,
-        shows: updateShow(state.shows, action.act, (s) => ({
-          ...s,
-          status: 'aufgelöst',
-          ergebnis: ergebnis.kategorie,
-        })),
-        view: 'auflösung',
-        letzteAuflösung: { ergebnis, auswirkungen },
-      }
+    case 'EREIGNIS_REAGIEREN': {
+      const ereignis = state.aktivesEreignis
+      if (!ereignis) return state
+      if (!state.activeShowAct) return state
+
+      const reaktion = action.reaktion === 'A' ? ereignis.reaktionA : ereignis.reaktionB
+
+      return führeShowAuflösungDurch(state, state.activeShowAct, reaktion.effekt, ereignis.beschreibung)
     }
 
     case 'BACK_TO_DASHBOARD':
@@ -328,6 +436,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         view: 'dashboard',
         activeShowAct: null,
         letzteAuflösung: null,
+        aktivesEreignis: null,
       }
 
     case 'WOCHE_ABSCHLIESSEN': {
@@ -385,6 +494,7 @@ interface GameContextValue extends GameState {
   assignVerleiher: (act: string, kategorie: EquipmentKategorie, name: string | null) => void
   toggleÜberstunden: (act: string, rolle: TechnikerRolle, aktiv: boolean) => void
   resolveShow: (act: string) => void
+  ereignisReagieren: (reaktion: 'A' | 'B') => void
   backToDashboard: () => void
   wocheAbschliessen: () => void
   entlassen: (name: string) => void
@@ -421,7 +531,35 @@ export function GameProvider({
         dispatch({ type: 'ASSIGN_VERLEIHER', act, kategorie, name }),
       toggleÜberstunden: (act, rolle, aktiv) =>
         dispatch({ type: 'TOGGLE_ÜBERSTUNDEN', act, rolle, aktiv }),
-      resolveShow: (act) => dispatch({ type: 'RESOLVE_SHOW', act }),
+      resolveShow: (act) => {
+        const show = state.shows.find((s) => s.act === act)
+        if (!show) return
+
+        const ereignisErgebnis = ermittleEreignis(
+          show,
+          state.techniker,
+          state.verleiher,
+          state.venue
+        )
+
+        if (!ereignisErgebnis) {
+          dispatch({ type: 'RESOLVE_SHOW', act })
+          return
+        }
+
+        if (ereignisErgebnis.typ === 'automatisch') {
+          dispatch({
+            type: 'RESOLVE_SHOW',
+            act,
+            ereignisEffekt: ereignisErgebnis.effekt,
+            ereignisBeschreibung: ereignisErgebnis.beschreibung,
+          })
+          return
+        }
+
+        dispatch({ type: 'EREIGNIS_AUFGETRETEN', ereignis: ereignisErgebnis.ereignis })
+      },
+      ereignisReagieren: (reaktion) => dispatch({ type: 'EREIGNIS_REAGIEREN', reaktion }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
       wocheAbschliessen: () => dispatch({ type: 'WOCHE_ABSCHLIESSEN' }),
       entlassen: (name) => dispatch({ type: 'ENTLASSEN', name }),
