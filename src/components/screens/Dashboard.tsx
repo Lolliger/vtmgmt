@@ -30,9 +30,20 @@ const preisniveauLabel: Record<Preisniveau, string> = {
 }
 
 export function Dashboard() {
-  const { venue, techniker, verleiher, shows, annehmen, ablehnen, openStaffing, speichern } =
-    useGame()
+  const {
+    venue,
+    woche,
+    techniker,
+    verleiher,
+    shows,
+    annehmen,
+    ablehnen,
+    openStaffing,
+    speichern,
+    wocheAbschliessen,
+  } = useGame()
   const [gespeichertHinweis, setGespeichertHinweis] = useState(false)
+  const [neueWocheHinweis, setNeueWocheHinweis] = useState(false)
 
   const offeneAnfragen = shows.filter((s) => s.status === 'offen')
   const anstehendeShows = shows.filter((s) => s.status === 'angenommen')
@@ -43,16 +54,28 @@ export function Dashboard() {
     setTimeout(() => setGespeichertHinweis(false), 2000)
   }
 
+  function handleWocheAbschliessen() {
+    wocheAbschliessen()
+    setNeueWocheHinweis(true)
+    setTimeout(() => setNeueWocheHinweis(false), 2000)
+  }
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6">
       <Card>
         <CardHeader>
           <CardTitle className="text-xl">{venue.name}</CardTitle>
-          <CardDescription>Venue-Übersicht</CardDescription>
+          <CardDescription>Venue-Übersicht · Woche {woche}</CardDescription>
           <CardAction className="flex items-center gap-2">
+            {neueWocheHinweis && (
+              <span className="text-sm text-muted-foreground">Neue Woche gestartet ✓</span>
+            )}
             {gespeichertHinweis && (
               <span className="text-sm text-muted-foreground">Gespeichert ✓</span>
             )}
+            <Button size="sm" onClick={handleWocheAbschliessen}>
+              Woche abschließen
+            </Button>
             <Button size="sm" variant="outline" onClick={handleSpeichern}>
               Speichern
             </Button>
@@ -60,6 +83,11 @@ export function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-8">
+            <div>
+              <p className="text-sm text-muted-foreground">Woche</p>
+              <p className="text-2xl font-semibold">{woche}</p>
+            </div>
+            <Separator orientation="vertical" className="h-auto" />
             <div>
               <p className="text-sm text-muted-foreground">Budget</p>
               <p className="text-2xl font-semibold">

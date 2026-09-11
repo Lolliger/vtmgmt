@@ -49,6 +49,7 @@ type GameAction =
   | { type: 'RESOLVE_SHOW'; act: string }
   | { type: 'TOGGLE_ÜBERSTUNDEN'; act: string; rolle: TechnikerRolle; aktiv: boolean }
   | { type: 'BACK_TO_DASHBOARD' }
+  | { type: 'WOCHE_ABSCHLIESSEN' }
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
@@ -175,17 +176,42 @@ function gameReducer(state: GameState, action: GameAction): GameState {
     case 'OPEN_STAFFING':
       return { ...state, view: 'staffing', activeShowAct: action.act }
 
-    case 'ASSIGN_TECHNIKER':
+    case 'ASSIGN_TECHNIKER': {
+      const show = state.shows.find((s) => s.act === action.act)
+      if (!show) return state
+
+      const alterName = show.zugewieseneTechniker[action.rolle]
+      const neuerName = action.name
+      const stunden = geschätzteShowStunden(show)
+
+      let neueTechniker = state.techniker
+      if (alterName && alterName !== neuerName) {
+        neueTechniker = neueTechniker.map((t) =>
+          t.name === alterName
+            ? { ...t, verplanteStunden: Math.max(0, t.verplanteStunden - stunden) }
+            : t
+        )
+      }
+      if (neuerName && neuerName !== alterName) {
+        neueTechniker = neueTechniker.map((t) =>
+          t.name === neuerName
+            ? { ...t, verplanteStunden: t.verplanteStunden + stunden }
+            : t
+        )
+      }
+
       return {
         ...state,
-        shows: updateShow(state.shows, action.act, (show) => ({
-          ...show,
+        techniker: neueTechniker,
+        shows: updateShow(state.shows, action.act, (s) => ({
+          ...s,
           zugewieseneTechniker: {
-            ...show.zugewieseneTechniker,
-            [action.rolle]: action.name,
+            ...s.zugewieseneTechniker,
+            [action.rolle]: neuerName,
           },
         })),
       }
+    }
 
     case 'ASSIGN_VERLEIHER':
       return {
@@ -246,6 +272,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         letzteAuflösung: null,
       }
 
+    case 'WOCHE_ABSCHLIESSEN':
+      return {
+        ...state,
+        woche: state.woche + 1,
+        techniker: state.techniker.map((t) => ({ ...t, verplanteStunden: 0 })),
+      }
+
     default:
       return state
   }
@@ -260,6 +293,7 @@ interface GameContextValue extends GameState {
   toggleÜberstunden: (act: string, rolle: TechnikerRolle, aktiv: boolean) => void
   resolveShow: (act: string) => void
   backToDashboard: () => void
+  wocheAbschliessen: () => void
   speichern: () => void
   activeShow: Anfrage | null
 }
@@ -291,6 +325,7 @@ export function GameProvider({
         dispatch({ type: 'TOGGLE_ÜBERSTUNDEN', act, rolle, aktiv }),
       resolveShow: (act) => dispatch({ type: 'RESOLVE_SHOW', act }),
       backToDashboard: () => dispatch({ type: 'BACK_TO_DASHBOARD' }),
+      wocheAbschliessen: () => dispatch({ type: 'WOCHE_ABSCHLIESSEN' }),
       speichern: () => {
         try {
           const spielstand: GespeicherterSpielstand = {
