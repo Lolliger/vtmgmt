@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react'
+import { MoralAnzeige } from '@/components/MoralAnzeige'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -150,9 +151,12 @@ export function StaffingScreen() {
                           <Badge variant="outline">verfügbar</Badge>
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {person.stufe} · Erfahrung {person.erfahrung}
-                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          {person.stufe} · Erfahrung {person.erfahrung}
+                        </p>
+                        <MoralAnzeige moral={person.moral} compact />
+                      </div>
                       <p
                         className={cn(
                           'text-xs',

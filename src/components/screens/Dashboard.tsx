@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { MoralAnzeige } from '@/components/MoralAnzeige'
 import { RollenAnforderungenListe } from '@/components/RollenAnforderungenListe'
 import { budgetFormatter, dateFormatter } from '@/lib/format'
 import { useGame } from '@/state/GameContext'
@@ -210,7 +211,7 @@ export function Dashboard() {
             {techniker.map((person) => (
               <div
                 key={person.name}
-                className="flex items-center justify-between gap-2 rounded-lg border border-border p-3"
+                className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
               >
                 <div>
                   <p className="font-medium">{person.name}</p>
@@ -218,6 +219,7 @@ export function Dashboard() {
                     {person.rolle} · Erfahrung {person.erfahrung}
                   </p>
                 </div>
+                <MoralAnzeige moral={person.moral} />
                 <div className="flex flex-col items-end gap-1">
                   <Badge variant={stufeVariant[person.stufe]}>{person.stufe}</Badge>
                   {!person.verfügbar && (
