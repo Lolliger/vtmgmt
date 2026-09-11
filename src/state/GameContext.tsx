@@ -58,6 +58,13 @@ type GameAction =
 
 export const SPIELSTAND_KEY = 'venue-manager-spielstand-v1'
 
+/**
+ * Version des Spielstand-Schemas (Struktur der in localStorage gespeicherten Daten).
+ * Bei inkompatiblen Änderungen am gespeicherten Format hochzählen - siehe
+ * pruefeSpielstandKompatibilitaet().
+ */
+export const SPIELSTAND_SCHEMA_VERSION = 1
+
 interface GespeicherterSpielstand {
   venue: Venue
   techniker: Techniker[]
@@ -66,6 +73,7 @@ interface GespeicherterSpielstand {
   woche: number
   minusWochenInFolge: number
   zwangsentlassungAusstehend: boolean
+  schemaVersion: number
 }
 
 function istGespeicherterSpielstand(value: unknown): value is GespeicherterSpielstand {
@@ -111,13 +119,47 @@ export function hatGespeichertenSpielstand(): boolean {
 }
 
 /**
+ * Prüft die Schema-Kompatibilität des gespeicherten Spielstands, ohne ihn
+ * vollständig zu laden.
+ * - 'kein-spielstand': kein Eintrag unter SPIELSTAND_KEY vorhanden.
+ * - 'inkompatibel': Eintrag vorhanden, aber schemaVersion fehlt, weicht ab,
+ *   oder das JSON lässt sich nicht parsen.
+ * - 'kompatibel': Eintrag vorhanden und schemaVersion stimmt überein.
+ * Crasht nie - alle Fehlerfälle laufen über try/catch.
+ */
+export function pruefeSpielstandKompatibilitaet(): 'kompatibel' | 'inkompatibel' | 'kein-spielstand' {
+  try {
+    const roh = localStorage.getItem(SPIELSTAND_KEY)
+    if (roh === null) return 'kein-spielstand'
+
+    const geparst: unknown = JSON.parse(roh)
+    if (!geparst || typeof geparst !== 'object') return 'inkompatibel'
+
+    const schemaVersion = (geparst as Record<string, unknown>).schemaVersion
+    if (schemaVersion !== SPIELSTAND_SCHEMA_VERSION) return 'inkompatibel'
+
+    return 'kompatibel'
+  } catch {
+    return 'inkompatibel'
+  }
+}
+
+/**
  * Lädt den gespeicherten Spielstand aus localStorage. Navigations-State
  * (view/activeShowAct/letzteAuflösung) wird bewusst NICHT wiederhergestellt,
  * sondern immer frisch gesetzt.
- * Gibt bei fehlendem Eintrag, Parse-Fehler oder fehlenden Feldern null zurück.
+ * Gibt bei fehlendem Eintrag, inkompatiblem Schema, Parse-Fehler oder
+ * fehlenden Feldern null zurück.
  */
 export function ladeGespeichertenSpielstand(): GameState | null {
   try {
+    const kompatibilitaet = pruefeSpielstandKompatibilitaet()
+    if (kompatibilitaet === 'kein-spielstand') return null
+    if (kompatibilitaet === 'inkompatibel') {
+      console.warn('Spielstand inkompatibel, altes Format')
+      return null
+    }
+
     const roh = localStorage.getItem(SPIELSTAND_KEY)
     if (roh === null) return null
 
@@ -393,6 +435,7 @@ export function GameProvider({
             woche: state.woche,
             minusWochenInFolge: state.minusWochenInFolge,
             zwangsentlassungAusstehend: state.zwangsentlassungAusstehend,
+            schemaVersion: SPIELSTAND_SCHEMA_VERSION,
           }
           localStorage.setItem(SPIELSTAND_KEY, JSON.stringify(spielstand))
         } catch (error) {

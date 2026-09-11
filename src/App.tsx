@@ -5,9 +5,9 @@ import { StaffingScreen } from '@/components/screens/StaffingScreen'
 import { StartScreen } from '@/components/screens/StartScreen'
 import {
   GameProvider,
-  hatGespeichertenSpielstand,
   ladeGespeichertenSpielstand,
   loescheGespeichertenSpielstand,
+  pruefeSpielstandKompatibilitaet,
   useGame,
   type GameState,
 } from '@/state/GameContext'
@@ -25,13 +25,15 @@ function Screens() {
 }
 
 function App() {
+  const [kompatibilitaet] = useState(() => pruefeSpielstandKompatibilitaet())
   const [gestartet, setGestartet] = useState<GameState | 'neu' | null>(() =>
-    hatGespeichertenSpielstand() ? null : 'neu'
+    kompatibilitaet === 'kein-spielstand' ? 'neu' : null
   )
 
   if (gestartet === null) {
     return (
       <StartScreen
+        kompatibilitaet={kompatibilitaet === 'inkompatibel' ? 'inkompatibel' : 'kompatibel'}
         onFortsetzen={() => {
           const geladen = ladeGespeichertenSpielstand()
           setGestartet(geladen ?? 'neu')
