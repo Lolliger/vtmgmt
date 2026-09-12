@@ -15,6 +15,10 @@ import {
   type EreignisPhase,
 } from '@/logic/ereignisse'
 import {
+  generiereZufälligeBewerbung,
+  generiereZufälligenEquipmentAntrag,
+} from '@/data/pools'
+import {
   berechneAuflösung,
   berechneAuswirkungen,
   geschätzteShowStunden,
@@ -579,6 +583,12 @@ function führeShowAuflösungDurch(
       ergebnis: ergebnis.kategorie,
     })),
     view: 'auflösung',
+    // activeShowAct MUSS hier auf die aufgelöste Show gesetzt werden: während des
+    // Ablaufs kann activeShowAct längst auf eine andere Show zeigen (Spieler hat
+    // parallel eine zweite Anfrage gestafft, siehe AblaufWidget-Kommentar oben),
+    // ohne diesen Reset würde AuflösungScreen (das activeShow aus activeShowAct
+    // ableitet) die falsche oder gar keine Show finden -> "Keine Auflösung verfügbar".
+    activeShowAct: act,
     letzteAuflösung: { ergebnis, auswirkungen },
     aktivesEreignis: null,
   }
@@ -701,6 +711,13 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       }
 
     case 'ABLAUF_STARTEN': {
+      // Schutz gegen zwei parallele Abläufe: läuft bereits ein Ablauf für eine ANDERE
+      // Show, wird dieser Start ignoriert - sonst würde ablaufStatus (ein einzelnes
+      // Objekt, keine Liste) überschrieben und die zuerst gestartete Show bliebe für
+      // immer unaufgelöst in 'angenommen' hängen. Neustart derselben Show (gleicher
+      // act) bleibt weiterhin erlaubt (Feature, siehe StaffingScreen-Bestätigungsdialog).
+      if (state.ablaufStatus && state.ablaufStatus.act !== action.act) return state
+
       // Aufbau-Malus: steht bereits beim Start fest, ob der (feste) Aufbau über
       // 19:30 Uhr hinausläuft - dann direkt als Ereignis vorbelegen, statt erst
       // bei der finalen Auflösung zu prüfen.
@@ -816,8 +833,34 @@ function gameReducer(state: GameState, action: GameAction): GameState {
         if (Date.now() < tagesUhr.blackoutBis) return state
 
         const neuerTag = tagesUhr.tag + 1
+
+        // Tägliche Generierung: neue Bewerbung und Equipment-Anträge, jeweils
+        // nur bis zu einer Obergrenze, damit die Listen nicht unbegrenzt
+        // wachsen, falls der Spieler nicht hinterherkommt.
+        const BEWERBUNGEN_OBERGRENZE = 5
+        const EQUIPMENT_ANTRAEGE_OBERGRENZE = 8
+
+        const neueBewerbungen =
+          state.bewerbungen.length < BEWERBUNGEN_OBERGRENZE
+            ? [...state.bewerbungen, generiereZufälligeBewerbung()]
+            : state.bewerbungen
+
+        const freieEquipmentAntragSlots = Math.max(
+          0,
+          EQUIPMENT_ANTRAEGE_OBERGRENZE - state.equipmentAntraege.length
+        )
+        const anzahlNeueEquipmentAntraege = Math.min(2, freieEquipmentAntragSlots)
+        const neueEquipmentAntraege = [
+          ...state.equipmentAntraege,
+          ...Array.from({ length: anzahlNeueEquipmentAntraege }, () =>
+            generiereZufälligenEquipmentAntrag()
+          ),
+        ]
+
         const neuerState: GameState = {
           ...state,
+          bewerbungen: neueBewerbungen,
+          equipmentAntraege: neueEquipmentAntraege,
           tagesUhr: {
             tag: neuerTag,
             tagStartZeitpunkt: Date.now(),
@@ -1054,8 +1097,7 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const neueItems: EquipmentItem[] = Array.from({ length: antrag.anzahl }, (_, i) => ({
         id: `${antrag.kategorie.toLowerCase()}-neu-${Date.now()}-${i}`,
         kategorie: antrag.kategorie,
-        name: `${antrag.kategorie} (neu)`,
-        zustand: 95 + Math.min(5, i),
+        name: antrag.anzahl > 1 ? `${antrag.produktname} ${i + 1}` : antrag.produktname,
       }))
 
       return {

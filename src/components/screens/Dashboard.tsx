@@ -10,13 +10,20 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MoralAnzeige } from '@/components/MoralAnzeige'
 import { RollenAnforderungenListe } from '@/components/RollenAnforderungenListe'
 import { useAktuelleMinute } from '@/hooks/useAktuelleMinute'
-import { budgetFormatter, dateFormatter } from '@/lib/format'
+import { budgetFormatter } from '@/lib/format'
 import { ermittlePhase, PHASE_LABEL } from '@/lib/ablaufAnzeige'
-import { cn } from '@/lib/utils'
 import { useGame } from '@/state/GameContext'
 import type { EquipmentKategorie, Preisniveau, TechnikerStufe } from '@/types'
 
@@ -35,17 +42,6 @@ const preisniveauLabel: Record<Preisniveau, string> = {
 }
 
 const KATEGORIE_REIHENFOLGE: EquipmentKategorie[] = ['PA', 'Licht', 'Rigging', 'IEM', 'Signal']
-
-/** Farblogik analog `MoralAnzeige`: >=80 gut/grün, 50-79 mittel/gelb, <50 kritisch/rot. */
-function zustandStatus(zustand: number) {
-  if (zustand < 50) {
-    return { text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500' }
-  }
-  if (zustand < 80) {
-    return { text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' }
-  }
-  return { text: 'text-emerald-700 dark:text-emerald-400', dot: 'bg-emerald-500' }
-}
 
 export function Dashboard() {
   const {
@@ -74,6 +70,7 @@ export function Dashboard() {
     ablaufStatus,
   } = useGame()
   const [gespeichertHinweis, setGespeichertHinweis] = useState(false)
+  const [angezeigteBewerbungId, setAngezeigteBewerbungId] = useState<string | null>(null)
   const aktuelleMinute = useAktuelleMinute()
 
   const laufendeShow = ablaufStatus ? shows.find((s) => s.act === ablaufStatus.act) : null
@@ -86,8 +83,11 @@ export function Dashboard() {
     kategorie,
     items: venue.equipmentBestand.filter((item) => item.kategorie === kategorie),
   })).filter((gruppe) => gruppe.items.length > 0)
-  const zeigeAntraegeSektion =
-    equipmentAntraege.length > 0 || bewerbungen.length > 0 || kuendigungsantraege.length > 0
+
+  const staffBadgeCount = bewerbungen.length + kuendigungsantraege.length
+  const equipmentBadgeCount = equipmentAntraege.length
+
+  const angezeigteBewerbung = bewerbungen.find((b) => b.id === angezeigteBewerbungId) ?? null
 
   function handleSpeichern() {
     speichern()
@@ -213,7 +213,6 @@ export function Dashboard() {
                   <Badge variant="outline">{show.genre}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {dateFormatter.format(new Date(show.termin))} ·{' '}
                   {show.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete Besucher ·{' '}
                   {budgetFormatter.format(show.gage)} Gage
                 </p>
@@ -226,126 +225,14 @@ export function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Equipment-Inventar</CardTitle>
-          <CardDescription>
-            {venue.equipmentBestand.length} Items gesamt · nach Kategorie, zum Aufklappen
-          </CardDescription>
+          <CardTitle>Anfragen-Inbox</CardTitle>
+          <CardDescription>Neue Show-Anfragen</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          {equipmentNachKategorie.map(({ kategorie, items }) => (
-            <details
-              key={kategorie}
-              className="group min-w-[180px] flex-1 rounded-lg border border-border p-3"
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm font-medium focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden [&::marker]:hidden">
-                <span>
-                  {kategorie} ({items.length})
-                </span>
-                <span
-                  className="text-xs text-muted-foreground transition-transform group-open:rotate-180"
-                  aria-hidden="true"
-                >
-                  ▾
-                </span>
-              </summary>
-              <ul className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-                {items.map((item) => {
-                  const status = zustandStatus(item.zustand)
-                  return (
-                    <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="text-muted-foreground">{item.name}</span>
-                      <span className={cn('flex items-center gap-1.5 font-medium', status.text)}>
-                        <span
-                          className={cn('h-1.5 w-1.5 rounded-full', status.dot)}
-                          aria-hidden="true"
-                        />
-                        {item.zustand}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </details>
-          ))}
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Team</CardTitle>
-            <CardDescription>Techniker im Überblick</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {techniker.map((person) => {
-              const imEinsatzBeiLaufenderShow =
-                laufendeShow &&
-                Object.values(laufendeShow.zugewieseneTechniker).includes(person.name)
-
-              return (
-                <div
-                  key={person.name}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
-                >
-                  <div>
-                    <p className="font-medium">{person.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {person.rolle} · Erfahrung {person.erfahrung}
-                    </p>
-                  </div>
-                  <MoralAnzeige moral={person.moral} />
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge variant={stufeVariant[person.stufe]}>{person.stufe}</Badge>
-                    {!person.verfügbar && imEinsatzBeiLaufenderShow && (
-                      <span className="text-xs font-medium text-primary">
-                        im Einsatz: {laufendePhase ? PHASE_LABEL[laufendePhase] : 'Einsatz'} bei{' '}
-                        {laufendeShow.act}
-                      </span>
-                    )}
-                    {!person.verfügbar && !imEinsatzBeiLaufenderShow && (
-                      <span className="text-xs text-muted-foreground">verplant</span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Verleiher</CardTitle>
-            <CardDescription>Bekannte Partner</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {verleiher.map((firma) => (
-              <div
-                key={firma.name}
-                className="flex flex-col gap-1 rounded-lg border border-border p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium">{firma.name}</p>
-                  <Badge variant="outline">{preisniveauLabel[firma.preisniveau]}</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Zuverlässigkeit {firma.zuverlässigkeit} · Beziehung {firma.beziehung}
-                </p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Anfragen-Inbox</CardTitle>
-            <CardDescription>Neue Show-Anfragen</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {offeneAnfragen.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Keine offenen Anfragen.
-              </p>
-            )}
+        <CardContent className="flex flex-col gap-3">
+          {offeneAnfragen.length === 0 && (
+            <p className="text-sm text-muted-foreground">Keine offenen Anfragen.</p>
+          )}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {offeneAnfragen.map((anfrage) => (
               <div
                 key={anfrage.act}
@@ -356,9 +243,7 @@ export function Dashboard() {
                   <Badge variant="outline">{anfrage.genre}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {dateFormatter.format(new Date(anfrage.termin))} ·{' '}
-                  {anfrage.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete
-                  Besucher
+                  {anfrage.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete Besucher
                 </p>
                 <p className="text-sm font-medium">
                   Gage: {budgetFormatter.format(anfrage.gage)}
@@ -378,46 +263,94 @@ export function Dashboard() {
                 </div>
               </div>
             ))}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
 
-      {zeigeAntraegeSektion && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {equipmentAntraege.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Equipment-Anträge</CardTitle>
-                <CardDescription>Anschaffungen zur Bewilligung</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {equipmentAntraege.map((antrag) => (
+      <Tabs defaultValue="staff">
+        <TabsList>
+          <TabsTrigger value="staff" className="gap-1.5">
+            Staff
+            {staffBadgeCount > 0 && (
+              <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
+                {staffBadgeCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="equipment" className="gap-1.5">
+            Equipment
+            {equipmentBadgeCount > 0 && (
+              <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
+                {equipmentBadgeCount}
+              </Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="staff" className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Team</CardTitle>
+              <CardDescription>Techniker im Überblick</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {techniker.map((person) => {
+                const imEinsatzBeiLaufenderShow =
+                  laufendeShow &&
+                  Object.values(laufendeShow.zugewieseneTechniker).includes(person.name)
+
+                return (
                   <div
-                    key={antrag.id}
-                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                    key={person.name}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border p-3"
                   >
-                    <p className="font-medium">{antrag.beschreibung}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {antrag.anzahl}x {antrag.kategorie} ·{' '}
-                      {budgetFormatter.format(antrag.anschaffungskosten)}
-                    </p>
-                    <div className="mt-1 flex gap-2">
-                      <Button size="sm" onClick={() => equipmentAntragBewilligen(antrag.id)}>
-                        Bewilligen
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => equipmentAntragAblehnen(antrag.id)}
-                      >
-                        Ablehnen
-                      </Button>
+                    <div>
+                      <p className="font-medium">{person.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {person.rolle} · Erfahrung {person.erfahrung}
+                      </p>
+                    </div>
+                    <MoralAnzeige moral={person.moral} />
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge variant={stufeVariant[person.stufe]}>{person.stufe}</Badge>
+                      {!person.verfügbar && imEinsatzBeiLaufenderShow && (
+                        <span className="text-xs font-medium text-primary">
+                          im Einsatz: {laufendePhase ? PHASE_LABEL[laufendePhase] : 'Einsatz'} bei{' '}
+                          {laufendeShow.act}
+                        </span>
+                      )}
+                      {!person.verfügbar && !imEinsatzBeiLaufenderShow && (
+                        <span className="text-xs text-muted-foreground">verplant</span>
+                      )}
                     </div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+                )
+              })}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Verleiher</CardTitle>
+              <CardDescription>Bekannte Partner</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {verleiher.map((firma) => (
+                <div
+                  key={firma.name}
+                  className="flex flex-col gap-1 rounded-lg border border-border p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium">{firma.name}</p>
+                    <Badge variant="outline">{preisniveauLabel[firma.preisniveau]}</Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Zuverlässigkeit {firma.zuverlässigkeit} · Beziehung {firma.beziehung}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
 
           {bewerbungen.length > 0 && (
             <Card>
@@ -431,15 +364,28 @@ export function Dashboard() {
                     key={bewerbung.id}
                     className="flex flex-col gap-2 rounded-lg border border-border p-3"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium">{bewerbung.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => setAngezeigteBewerbungId(bewerbung.id)}
+                      className="flex flex-wrap items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      <p className="font-medium underline-offset-4 hover:underline">
+                        {bewerbung.name}
+                      </p>
                       <Badge variant="outline">{bewerbung.rolle}</Badge>
                       <Badge variant={stufeVariant[bewerbung.stufe]}>{bewerbung.stufe}</Badge>
-                    </div>
+                    </button>
                     <p className="text-sm text-muted-foreground">
                       Erfahrung {bewerbung.erfahrung} ·{' '}
                       {budgetFormatter.format(bewerbung.gehaltsforderung)} / Woche
                     </p>
+                    <button
+                      type="button"
+                      onClick={() => setAngezeigteBewerbungId(bewerbung.id)}
+                      className="w-fit text-sm text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                    >
+                      Bewerbungsschreiben ansehen
+                    </button>
                     <div className="mt-1 flex gap-2">
                       <Button size="sm" onClick={() => bewerbungAnnehmen(bewerbung.id)}>
                         Einstellen
@@ -493,8 +439,101 @@ export function Dashboard() {
               </CardContent>
             </Card>
           )}
-        </div>
-      )}
+        </TabsContent>
+
+        <TabsContent value="equipment" className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Equipment-Inventar</CardTitle>
+              <CardDescription>
+                {venue.equipmentBestand.length} Items gesamt · nach Kategorie, zum Aufklappen
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              {equipmentNachKategorie.map(({ kategorie, items }) => (
+                <details
+                  key={kategorie}
+                  className="group min-w-[180px] flex-1 rounded-lg border border-border p-3"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm font-medium focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden [&::marker]:hidden">
+                    <span>
+                      {kategorie} ({items.length})
+                    </span>
+                    <span
+                      className="text-xs text-muted-foreground transition-transform group-open:rotate-180"
+                      aria-hidden="true"
+                    >
+                      ▾
+                    </span>
+                  </summary>
+                  <ul className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
+                    {items.map((item) => (
+                      <li key={item.id} className="text-sm text-muted-foreground">
+                        {item.name}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
+            </CardContent>
+          </Card>
+
+          {equipmentAntraege.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Equipment-Anträge</CardTitle>
+                <CardDescription>Anschaffungen zur Bewilligung</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {equipmentAntraege.map((antrag) => (
+                  <div
+                    key={antrag.id}
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                  >
+                    <p className="font-medium">{antrag.beschreibung}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {antrag.anzahl}x {antrag.kategorie} ·{' '}
+                      {budgetFormatter.format(antrag.anschaffungskosten)}
+                    </p>
+                    <div className="mt-1 flex gap-2">
+                      <Button size="sm" onClick={() => equipmentAntragBewilligen(antrag.id)}>
+                        Bewilligen
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => equipmentAntragAblehnen(antrag.id)}
+                      >
+                        Ablehnen
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog
+        open={angezeigteBewerbung !== null}
+        onOpenChange={(open) => {
+          if (!open) setAngezeigteBewerbungId(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Bewerbung von {angezeigteBewerbung?.name ?? ''}
+            </DialogTitle>
+            <DialogDescription asChild>
+              <p className="whitespace-pre-wrap text-foreground">
+                {angezeigteBewerbung?.bewerbungsschreiben}
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

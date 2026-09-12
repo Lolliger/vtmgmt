@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { budgetFormatter, dateFormatter } from '@/lib/format'
+import { budgetFormatter } from '@/lib/format'
 import { ermittlePhase, PHASE_LABEL } from '@/lib/ablaufAnzeige'
 import { useAktuelleMinute } from '@/hooks/useAktuelleMinute'
 import type { Schwierigkeit } from '@/data/genreAnforderungen'
@@ -72,6 +72,9 @@ export function StaffingScreen() {
   const kannDurchführen = alleRollenBesetzt && alleLückenGedeckt
 
   const ablaufLäuftBereits = ablaufStatus?.act === activeShow.act
+  // Läuft der Ablauf gerade für eine ANDERE Show, blockiert der Reducer den Start
+  // (siehe ABLAUF_STARTEN-Guard in GameContext) - hier nur die Erklärung dafür.
+  const andereShowLäuft = ablaufStatus !== null && ablaufStatus.act !== activeShow.act
   const laufendePhase = ablaufLäuftBereits ? ermittlePhase(ablaufStatus, aktuelleMinute) : null
 
   const activeShowAct = activeShow.act
@@ -97,7 +100,6 @@ export function StaffingScreen() {
         <CardHeader>
           <CardTitle className="text-xl">{activeShow.act}</CardTitle>
           <CardDescription>
-            {dateFormatter.format(new Date(activeShow.termin))} ·{' '}
             {activeShow.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete Besucher ·{' '}
             {budgetFormatter.format(activeShow.gage)} Gage
           </CardDescription>
@@ -110,6 +112,12 @@ export function StaffingScreen() {
             <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
               Diese Show läuft bereits (Phase: {laufendePhase ? PHASE_LABEL[laufendePhase] : '–'})
               – Änderungen hier gelten erst nach einem Neustart.
+            </p>
+          )}
+          {andereShowLäuft && (
+            <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              Gerade läuft bereits der Ablauf von „{ablaufStatus?.act}“ – erst wenn diese Show
+              fertig ist, kann eine weitere durchgeführt werden.
             </p>
           )}
         </CardContent>
@@ -306,7 +314,7 @@ export function StaffingScreen() {
       )}
 
       <div className="flex justify-end">
-        <Button disabled={!kannDurchführen} onClick={handleDurchführen}>
+        <Button disabled={!kannDurchführen || andereShowLäuft} onClick={handleDurchführen}>
           Show durchführen
         </Button>
       </div>

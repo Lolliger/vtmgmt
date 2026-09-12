@@ -11,61 +11,55 @@ import type {
 } from '@/types'
 
 /**
- * Baut die einzelnen Equipment-Items einer Kategorie aus parallelen Namens-
- * und Zustands-Listen. Zustände sind feste Werte (kein Math.random()), damit
- * Dummy-Daten deterministisch bleiben.
+ * Baut die einzelnen Equipment-Items einer Kategorie aus einer Namensliste.
  */
-function baueEquipmentItems(
-  kategorie: EquipmentKategorie,
-  namen: string[],
-  zustände: number[]
-): EquipmentItem[] {
+function baueEquipmentItems(kategorie: EquipmentKategorie, namen: string[]): EquipmentItem[] {
   return namen.map((name, i) => ({
     id: `${kategorie.toLowerCase()}-${i + 1}`,
     kategorie,
     name,
-    zustand: zustände[i],
   }))
 }
 
 export const equipmentBestand: EquipmentItem[] = [
-  ...baueEquipmentItems(
-    'PA',
-    [
-      'PA-Stack Links',
-      'PA-Stack Rechts',
-      'Subwoofer 1',
-      'Subwoofer 2',
-      'Subwoofer 3',
-      'Subwoofer 4',
-    ],
-    [92, 90, 78, 78, 65, 60]
-  ),
-  ...baueEquipmentItems(
-    'Licht',
-    ['Moving Head 1', 'Moving Head 2', 'Moving Head 3', 'PAR-Scheinwerfer 1', 'PAR-Scheinwerfer 2'],
-    [85, 82, 70, 95, 88]
-  ),
-  ...baueEquipmentItems('Rigging', ['Traverse 1', 'Traverse 2', 'Traverse 3'], [90, 75, 68]),
-  ...baueEquipmentItems(
-    'IEM',
-    [
-      'IEM-Set 1',
-      'IEM-Set 2',
-      'IEM-Set 3',
-      'IEM-Set 4',
-      'IEM-Set 5',
-      'IEM-Set 6',
-      'IEM-Set 7',
-      'IEM-Set 8',
-    ],
-    [88, 88, 80, 80, 72, 72, 60, 55]
-  ),
-  ...baueEquipmentItems(
-    'Signal',
-    ['Stagebox', 'Mischpult-Patch', 'Multicore 1', 'Multicore 2', 'Multicore 3', 'Multicore 4'],
-    [95, 90, 80, 80, 70, 62]
-  ),
+  ...baueEquipmentItems('PA', [
+    'L-Acoustics K2 (Links)',
+    'L-Acoustics K2 (Rechts)',
+    'L-Acoustics KS28 Subwoofer 1',
+    'L-Acoustics KS28 Subwoofer 2',
+    'L-Acoustics A15 Frontfill',
+    'L-Acoustics X12 Bühnenmonitor',
+  ]),
+  ...baueEquipmentItems('Licht', [
+    'Clay Paky Sharpy Moving Head 1',
+    'Clay Paky Sharpy Moving Head 2',
+    'Robe Pointe Moving Head',
+    'Chauvet Rogue R2 Wash',
+    'ETC Source Four PAR',
+  ]),
+  ...baueEquipmentItems('Rigging', [
+    '3-Punkt-Traverse, 4m',
+    '4-Punkt-Traverse, 6m',
+    '2-Punkt-Traverse, 3m',
+  ]),
+  ...baueEquipmentItems('IEM', [
+    'Shure PSM1000 IEM-Set 1',
+    'Shure PSM1000 IEM-Set 2',
+    'Shure PSM1000 IEM-Set 3',
+    'Shure PSM1000 IEM-Set 4',
+    'Sennheiser EW IEM G4 Set 1',
+    'Sennheiser EW IEM G4 Set 2',
+    'Sennheiser EW IEM G4 Set 3',
+    'Sennheiser EW IEM G4 Set 4',
+  ]),
+  ...baueEquipmentItems('Signal', [
+    'DiGiCo SD9 Stagebox',
+    'Yamaha Rio Stagebox',
+    'Klotz Multicore 24-Kanal',
+    'Klotz Multicore 32-Kanal',
+    'Neutrik Patchbay 1',
+    'Neutrik Patchbay 2',
+  ]),
 ]
 
 export const venue: Venue = {
@@ -81,21 +75,24 @@ export const equipmentAntraege: EquipmentAntrag[] = [
     kategorie: 'PA',
     anzahl: 2,
     anschaffungskosten: 3200,
-    beschreibung: '2 zusätzliche PA-Subwoofer für größere Shows',
+    beschreibung: '2x L-Acoustics KS28 Subwoofer für mehr Bass bei größeren Shows',
+    produktname: 'L-Acoustics KS28 Subwoofer',
   },
   {
     id: 'antrag-2',
     kategorie: 'Rigging',
     anzahl: 1,
     anschaffungskosten: 900,
-    beschreibung: '1 Ersatz-Rigging-Traverse',
+    beschreibung: '1x zusätzliche 4-Punkt-Traverse, 6m',
+    produktname: '4-Punkt-Traverse, 6m',
   },
   {
     id: 'antrag-3',
     kategorie: 'IEM',
     anzahl: 3,
     anschaffungskosten: 1500,
-    beschreibung: '3 neue IEM-Sets (aktuelle sind veraltet)',
+    beschreibung: '3x Sennheiser EW IEM G4 Sets (aktuelle sind veraltet)',
+    produktname: 'Sennheiser EW IEM G4 Set',
   },
 ]
 
@@ -107,6 +104,8 @@ export const bewerbungen: Bewerbung[] = [
     stufe: 'Trainee',
     erfahrung: 5,
     gehaltsforderung: 400,
+    bewerbungsschreiben:
+      'Ich habe gerade meine Ausbildung im Bereich Veranstaltungstechnik abgeschlossen und möchte als Trainee im Bereich FOH erste praktische Erfahrung in einer echten Venue sammeln. Ich bin lernbereit und flexibel einsetzbar.',
   },
   {
     id: 'bewerbung-2',
@@ -115,6 +114,8 @@ export const bewerbungen: Bewerbung[] = [
     stufe: 'Techniker',
     erfahrung: 30,
     gehaltsforderung: 650,
+    bewerbungsschreiben:
+      'Seit Jahren arbeite ich als Licht auf Konzerten und Festivals und möchte den nächsten Schritt als Techniker gehen. Ich bringe Erfahrung im Umgang mit anspruchsvollen Produktionen mit und freue mich auf die Zusammenarbeit mit eurem Team.',
   },
   {
     id: 'bewerbung-3',
@@ -123,6 +124,8 @@ export const bewerbungen: Bewerbung[] = [
     stufe: 'Senior',
     erfahrung: 55,
     gehaltsforderung: 950,
+    bewerbungsschreiben:
+      'Mit über sechs Jahren Erfahrung im Bereich Monitor auf großen Bühnen bewerbe ich mich um die Position als Senior in eurem Haus. Ich lege großen Wert auf sauberes Arbeiten unter Zeitdruck und ein gutes Verhältnis zu Acts und Kolleginnen.',
   },
 ]
 
@@ -263,7 +266,6 @@ export const verleiher: Verleiher[] = [
 export const anfragen: Anfrage[] = [
   {
     act: 'Kollektiv Nova',
-    termin: '2026-10-17',
     erwarteteBesucherzahl: 850,
     genre: 'Pop/Electronic',
     gage: 4200,
@@ -275,7 +277,6 @@ export const anfragen: Anfrage[] = [
   },
   {
     act: 'Stahlfront',
-    termin: '2026-10-24',
     erwarteteBesucherzahl: 600,
     genre: 'Metal/Rock',
     gage: 5200,
@@ -287,7 +288,6 @@ export const anfragen: Anfrage[] = [
   },
   {
     act: 'Mona & die Feingeister',
-    termin: '2026-10-19',
     erwarteteBesucherzahl: 250,
     genre: 'Akustik',
     gage: 1800,
@@ -299,7 +299,6 @@ export const anfragen: Anfrage[] = [
   },
   {
     act: 'Bassrepublik',
-    termin: '2026-10-26',
     erwarteteBesucherzahl: 900,
     genre: 'Hip-Hop/Rap',
     gage: 4800,
@@ -311,7 +310,6 @@ export const anfragen: Anfrage[] = [
   },
   {
     act: 'Sonnenkreis Trio',
-    termin: '2026-10-21',
     erwarteteBesucherzahl: 180,
     genre: 'Akustik',
     gage: 1400,
@@ -323,7 +321,6 @@ export const anfragen: Anfrage[] = [
   },
   {
     act: 'Nordklang Festival Showcase',
-    termin: '2026-10-31',
     erwarteteBesucherzahl: 1400,
     genre: 'Pop/Electronic',
     gage: 7500,
@@ -335,7 +332,6 @@ export const anfragen: Anfrage[] = [
   },
   {
     act: 'Riot Parade',
-    termin: '2026-10-28',
     erwarteteBesucherzahl: 750,
     genre: 'Metal/Rock',
     gage: 5800,

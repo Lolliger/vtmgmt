@@ -4,8 +4,6 @@ export interface EquipmentItem {
   id: string
   kategorie: EquipmentKategorie
   name: string
-  /** Zustand/Abnutzung, Skala 0-100. */
-  zustand: number
 }
 
 export interface Venue {
@@ -47,6 +45,7 @@ export interface EquipmentAntrag {
   anzahl: number
   anschaffungskosten: number
   beschreibung: string
+  produktname: string
 }
 
 export type Preisniveau = 'günstig' | 'mittel' | 'premium'
@@ -67,7 +66,6 @@ export type Ergebnis = 'gut' | 'mittel' | 'problematisch'
 
 export interface Anfrage {
   act: string
-  termin: string
   erwarteteBesucherzahl: number
   genre: Genre
   gage: number
@@ -87,6 +85,8 @@ export interface Bewerbung {
   stufe: TechnikerStufe
   erfahrung: number
   gehaltsforderung: number
+  /** Fertig personalisierter Bewerbungstext (keine Platzhalter mehr). */
+  bewerbungsschreiben: string
 }
 
 /** Kündigungsantrag eines bestehenden Technikers - vom Spieler zu akzeptieren/abzulehnen. */
