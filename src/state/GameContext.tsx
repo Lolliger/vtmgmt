@@ -1094,10 +1094,18 @@ function gameReducer(state: GameState, action: GameAction): GameState {
       const antrag = state.equipmentAntraege.find((a) => a.id === action.id)
       if (!antrag) return state
 
+      const vorhandeneAnzahl = state.venue.equipmentBestand.filter(
+        (item) => item.kategorie === antrag.kategorie && item.name.startsWith(antrag.produktname)
+      ).length
+      const gesamtAnzahlNachBewilligung = vorhandeneAnzahl + antrag.anzahl
+
       const neueItems: EquipmentItem[] = Array.from({ length: antrag.anzahl }, (_, i) => ({
         id: `${antrag.kategorie.toLowerCase()}-neu-${Date.now()}-${i}`,
         kategorie: antrag.kategorie,
-        name: antrag.anzahl > 1 ? `${antrag.produktname} ${i + 1}` : antrag.produktname,
+        name:
+          gesamtAnzahlNachBewilligung > 1
+            ? `${antrag.produktname} #${vorhandeneAnzahl + i + 1}`
+            : antrag.produktname,
       }))
 
       return {

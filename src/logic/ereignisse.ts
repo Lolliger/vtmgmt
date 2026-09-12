@@ -273,7 +273,7 @@ function prüfeTechnischerAusfall(
 ): { ereignis: Ereignis; chance: number } | null {
   const bedarfe = ermittleAlleEquipmentBedarfe(anfrage.genre, venue.equipmentBestand)
   const betroffen = bedarfe.some(
-    (b) => (b.kategorie === 'PA' || b.kategorie === 'Signal') && b.bedarf > 0
+    (b) => (b.kategorie === 'PA' || b.kategorie === 'Processing') && b.bedarf > 0
   )
   if (!betroffen) return null
 

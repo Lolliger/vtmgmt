@@ -22,7 +22,7 @@ export const GENRE_ANFORDERUNGEN: Record<
       FOH: {
         schwierigkeit: 'hoch',
         minStufe: 'Senior',
-        equipmentBedarf: { PA: 5, Signal: 6 },
+        equipmentBedarf: { PA: 5, Processing: 6 },
       },
       Monitor: {
         schwierigkeit: 'hoch',
@@ -46,7 +46,7 @@ export const GENRE_ANFORDERUNGEN: Record<
       FOH: {
         schwierigkeit: 'mittel',
         minStufe: 'Techniker',
-        equipmentBedarf: { PA: 6, Signal: 5 },
+        equipmentBedarf: { PA: 6, Processing: 5 },
       },
       Monitor: {
         schwierigkeit: 'mittel',
@@ -70,7 +70,7 @@ export const GENRE_ANFORDERUNGEN: Record<
       FOH: {
         schwierigkeit: 'niedrig',
         minStufe: 'Trainee',
-        equipmentBedarf: { PA: 2, Signal: 2 },
+        equipmentBedarf: { PA: 2, Processing: 2 },
       },
       Monitor: {
         schwierigkeit: 'niedrig',
@@ -89,7 +89,7 @@ export const GENRE_ANFORDERUNGEN: Record<
       FOH: {
         schwierigkeit: 'hoch',
         minStufe: 'Senior',
-        equipmentBedarf: { PA: 7, Signal: 5 },
+        equipmentBedarf: { PA: 7, Processing: 5 },
       },
       Monitor: {
         schwierigkeit: 'mittel',

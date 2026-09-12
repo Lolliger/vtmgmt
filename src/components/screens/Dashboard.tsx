@@ -49,7 +49,7 @@ const preisniveauLabel: Record<Preisniveau, string> = {
   premium: '€€€ premium',
 }
 
-const KATEGORIE_REIHENFOLGE: EquipmentKategorie[] = ['PA', 'Licht', 'Rigging', 'IEM', 'Signal']
+const KATEGORIE_REIHENFOLGE: EquipmentKategorie[] = ['PA', 'Licht', 'Rigging', 'IEM', 'Processing']
 
 export function Dashboard() {
   const {

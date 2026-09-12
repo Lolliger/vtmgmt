@@ -1,4 +1,4 @@
-export type EquipmentKategorie = 'PA' | 'Licht' | 'Rigging' | 'IEM' | 'Signal'
+export type EquipmentKategorie = 'PA' | 'Licht' | 'Rigging' | 'IEM' | 'Processing'
 
 export interface EquipmentItem {
   id: string

@@ -97,7 +97,7 @@ export function ermittleAlleEquipmentBedarfe(
 /** Gewichtung der Equipment-Kategorien für den Equipment-Score. */
 export const EQUIPMENT_KATEGORIE_GEWICHT: Record<EquipmentKategorie, number> = {
   PA: 1.5,
-  Signal: 1.5,
+  Processing: 1.5,
   Rigging: 1.25,
   Licht: 1.0,
   IEM: 1.0,

@@ -56,17 +56,17 @@ export const EQUIPMENT_ANTRAG_VORLAGEN: {
 }[] = [
   {
     kategorie: 'PA',
-    anzahl: 2,
-    anschaffungskosten: 2600,
-    beschreibung: '2x L-Acoustics A15 Frontfill für gleichmäßigere Beschallung vorne',
-    produktname: 'L-Acoustics A15 Frontfill',
+    anzahl: 1,
+    anschaffungskosten: 4200,
+    beschreibung: '1x L-Acoustics LA4X als zusätzlicher Verstärker für kleinere Zusatz-PA',
+    produktname: 'L-Acoustics LA4X (Verstärker)',
   },
   {
     kategorie: 'PA',
     anzahl: 1,
     anschaffungskosten: 1800,
-    beschreibung: '1x L-Acoustics X12 Bühnenmonitor als Ersatz für ein defektes Modell',
-    produktname: 'L-Acoustics X12 Bühnenmonitor',
+    beschreibung: '1x L-Acoustics X12 (Bühnenmonitor) als Ersatz für ein defektes Modell',
+    produktname: 'L-Acoustics X12 (Bühnenmonitor)',
   },
   {
     kategorie: 'Licht',
@@ -77,10 +77,10 @@ export const EQUIPMENT_ANTRAG_VORLAGEN: {
   },
   {
     kategorie: 'Licht',
-    anzahl: 2,
-    anschaffungskosten: 1600,
-    beschreibung: '2x Chauvet Rogue R2 Wash für flächigere Bühnenausleuchtung',
-    produktname: 'Chauvet Rogue R2 Wash',
+    anzahl: 1,
+    anschaffungskosten: 2400,
+    beschreibung: '1x zusätzlicher Clay Paky Mythos für mehr Hybrid-Lichteffekte',
+    produktname: 'Clay Paky Mythos',
   },
   {
     kategorie: 'Rigging',
@@ -111,14 +111,14 @@ export const EQUIPMENT_ANTRAG_VORLAGEN: {
     produktname: 'Sennheiser EW IEM G4 Set',
   },
   {
-    kategorie: 'Signal',
+    kategorie: 'Processing',
     anzahl: 1,
-    anschaffungskosten: 3500,
-    beschreibung: '1x Yamaha Rio3224-D2 Stagebox für mehr Kanäle bei großen Produktionen',
-    produktname: 'Yamaha Rio3224-D2 Stagebox',
+    anschaffungskosten: 3200,
+    beschreibung: '1x zusätzliche Allen & Heath DM48 Stagebox für mehr Kanäle bei großen Produktionen',
+    produktname: 'Allen & Heath DM48',
   },
   {
-    kategorie: 'Signal',
+    kategorie: 'Processing',
     anzahl: 2,
     anschaffungskosten: 900,
     beschreibung: '2x Klotz Multicore 32-Kanal für flexiblere Signalführung',
