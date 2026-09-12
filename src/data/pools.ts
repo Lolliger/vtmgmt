@@ -72,8 +72,8 @@ export const EQUIPMENT_ANTRAG_VORLAGEN: {
     kategorie: 'Licht',
     anzahl: 1,
     anschaffungskosten: 2200,
-    beschreibung: '1x Clay Paky Sharpy Moving Head für mehr Effektlicht',
-    produktname: 'Clay Paky Sharpy Moving Head',
+    beschreibung: '1x Clay Paky Sharpy für mehr Effektlicht',
+    produktname: 'Clay Paky Sharpy',
   },
   {
     kategorie: 'Licht',
@@ -114,8 +114,8 @@ export const EQUIPMENT_ANTRAG_VORLAGEN: {
     kategorie: 'Signal',
     anzahl: 1,
     anschaffungskosten: 3500,
-    beschreibung: '1x DiGiCo SD9 Stagebox für mehr Kanäle bei großen Produktionen',
-    produktname: 'DiGiCo SD9 Stagebox',
+    beschreibung: '1x Yamaha Rio3224-D2 Stagebox für mehr Kanäle bei großen Produktionen',
+    produktname: 'Yamaha Rio3224-D2 Stagebox',
   },
   {
     kategorie: 'Signal',

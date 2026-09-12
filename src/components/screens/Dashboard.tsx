@@ -19,6 +19,14 @@ import {
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { MoralAnzeige } from '@/components/MoralAnzeige'
 import { RollenAnforderungenListe } from '@/components/RollenAnforderungenListe'
 import { useAktuelleMinute } from '@/hooks/useAktuelleMinute'
@@ -86,6 +94,7 @@ export function Dashboard() {
 
   const staffBadgeCount = bewerbungen.length + kuendigungsantraege.length
   const equipmentBadgeCount = equipmentAntraege.length
+  const anfragenBadgeCount = offeneAnfragen.length
 
   const angezeigteBewerbung = bewerbungen.find((b) => b.id === angezeigteBewerbungId) ?? null
 
@@ -223,52 +232,16 @@ export function Dashboard() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Anfragen-Inbox</CardTitle>
-          <CardDescription>Neue Show-Anfragen</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {offeneAnfragen.length === 0 && (
-            <p className="text-sm text-muted-foreground">Keine offenen Anfragen.</p>
-          )}
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {offeneAnfragen.map((anfrage) => (
-              <div
-                key={anfrage.act}
-                className="flex flex-col gap-2 rounded-lg border border-border p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium">{anfrage.act}</p>
-                  <Badge variant="outline">{anfrage.genre}</Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {anfrage.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete Besucher
-                </p>
-                <p className="text-sm font-medium">
-                  Gage: {budgetFormatter.format(anfrage.gage)}
-                </p>
-                <RollenAnforderungenListe genre={anfrage.genre} />
-                <div className="mt-1 flex gap-2">
-                  <Button size="sm" onClick={() => annehmen(anfrage.act)}>
-                    Annehmen
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => ablehnen(anfrage.act)}
-                  >
-                    Ablehnen
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="staff">
+      <Tabs defaultValue="anfragen">
         <TabsList>
+          <TabsTrigger value="anfragen" className="gap-1.5">
+            Anfragen
+            {anfragenBadgeCount > 0 && (
+              <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px]">
+                {anfragenBadgeCount}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="staff" className="gap-1.5">
             Staff
             {staffBadgeCount > 0 && (
@@ -286,6 +259,52 @@ export function Dashboard() {
             )}
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="anfragen" className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Anfragen-Inbox</CardTitle>
+              <CardDescription>Neue Show-Anfragen</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {offeneAnfragen.length === 0 && (
+                <p className="text-sm text-muted-foreground">Keine offenen Anfragen.</p>
+              )}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {offeneAnfragen.map((anfrage) => (
+                  <div
+                    key={anfrage.act}
+                    className="flex flex-col gap-2 rounded-lg border border-border p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium">{anfrage.act}</p>
+                      <Badge variant="outline">{anfrage.genre}</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {anfrage.erwarteteBesucherzahl.toLocaleString('de-DE')} erwartete Besucher
+                    </p>
+                    <p className="text-sm font-medium">
+                      Gage: {budgetFormatter.format(anfrage.gage)}
+                    </p>
+                    <RollenAnforderungenListe genre={anfrage.genre} />
+                    <div className="mt-1 flex gap-2">
+                      <Button size="sm" onClick={() => annehmen(anfrage.act)}>
+                        Annehmen
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => ablehnen(anfrage.act)}
+                      >
+                        Ablehnen
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="staff" className="flex flex-col gap-6">
           <Card>
@@ -446,35 +465,36 @@ export function Dashboard() {
             <CardHeader>
               <CardTitle>Equipment-Inventar</CardTitle>
               <CardDescription>
-                {venue.equipmentBestand.length} Items gesamt · nach Kategorie, zum Aufklappen
+                {venue.equipmentBestand.length} Items gesamt · nach Kategorie sortiert
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
-              {equipmentNachKategorie.map(({ kategorie, items }) => (
-                <details
-                  key={kategorie}
-                  className="group min-w-[180px] flex-1 rounded-lg border border-border p-3"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm font-medium focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden [&::marker]:hidden">
-                    <span>
-                      {kategorie} ({items.length})
-                    </span>
-                    <span
-                      className="text-xs text-muted-foreground transition-transform group-open:rotate-180"
-                      aria-hidden="true"
-                    >
-                      ▾
-                    </span>
-                  </summary>
-                  <ul className="mt-2 flex flex-col gap-1 border-t border-border pt-2">
-                    {items.map((item) => (
-                      <li key={item.id} className="text-sm text-muted-foreground">
-                        {item.name}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
+            <CardContent>
+              <div className="max-h-96 overflow-y-auto rounded-lg border border-border">
+                <Table>
+                  <TableHeader className="sticky top-0 z-10 bg-card">
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Kategorie</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {equipmentNachKategorie.map(({ kategorie, items }) =>
+                      items.map((item, index) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="whitespace-normal">{item.name}</TableCell>
+                          <TableCell>
+                            {index === 0 ? (
+                              <Badge variant="outline">{kategorie}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">{kategorie}</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 

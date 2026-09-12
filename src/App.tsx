@@ -34,15 +34,18 @@ function Screens() {
   }, [])
 
   return (
-    <div className="min-h-svh bg-muted/30 px-4 pt-52 pb-8 sm:px-8">
+    <div className="min-h-svh bg-muted/30 px-4 pt-28 pb-8 sm:px-8">
       {/*
-       * pt-52 statt eines normalen py-8: UhrAnzeige (fixed top-4 right-4) ist
-       * immer sichtbar, AblaufWidget (fixed top-4 left-4) kommt während eines
-       * laufenden Show-Ablaufs dazu. Beide sind `fixed` und daher aus dem
-       * normalen Fluss raus - ohne genug Top-Padding hier würde der obere
-       * Dashboard-Inhalt darunter verschwinden. Gemessen: AblaufWidget reicht
-       * im ungünstigsten Fall bis ~190px von oben (Card-Header + Fortschritt +
-       * Flavor-Text + kompakte Szene); pt-52 (208px) lässt Puffer.
+       * pt-28 statt eines normalen py-8: UhrAnzeige (fixed top-4 right-4) ist
+       * immer sichtbar und recht kompakt (gemessen: ~97-98px hoch inkl.
+       * top-4-Versatz) - pt-28 (112px) deckt das mit ca. 14px Puffer ab, ohne
+       * im Normalfall (kein Ablauf aktiv) unnötig viel Weißraum zu erzeugen.
+       * Das AblaufWidget (fixed top-4 left-4) ist während eines laufenden
+       * Show-Ablaufs deutlich höher (gemessen bis ~240px, je nach Verlauf/
+       * Mini-Entscheidung) und kann dadurch mit dem oberen Rand der ersten
+       * Dashboard-Card überlappen - bewusster Trade-off: seltener Fall (nur
+       * während eines laufenden Ablaufs), klar besser als ständig 208px
+       * verschwendeter Weißraum im Normalfall.
        */}
       <UhrAnzeige />
       <AblaufWidget />

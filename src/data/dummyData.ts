@@ -31,9 +31,9 @@ export const equipmentBestand: EquipmentItem[] = [
     'L-Acoustics X12 Bühnenmonitor',
   ]),
   ...baueEquipmentItems('Licht', [
-    'Clay Paky Sharpy Moving Head 1',
-    'Clay Paky Sharpy Moving Head 2',
-    'Robe Pointe Moving Head',
+    'Clay Paky Sharpy 1',
+    'Clay Paky Sharpy 2',
+    'Robe Pointe',
     'Chauvet Rogue R2 Wash',
     'ETC Source Four PAR',
   ]),
@@ -53,12 +53,12 @@ export const equipmentBestand: EquipmentItem[] = [
     'Sennheiser EW IEM G4 Set 4',
   ]),
   ...baueEquipmentItems('Signal', [
-    'DiGiCo SD9 Stagebox',
-    'Yamaha Rio Stagebox',
+    'Yamaha CL5 (FOH-Digitalpult)',
+    'Yamaha Rio3224-D2 Stagebox 1',
+    'Yamaha Rio3224-D2 Stagebox 2',
     'Klotz Multicore 24-Kanal',
     'Klotz Multicore 32-Kanal',
-    'Neutrik Patchbay 1',
-    'Neutrik Patchbay 2',
+    'Neutrik Patchbay',
   ]),
 ]
 
